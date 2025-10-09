@@ -1,0 +1,12 @@
+numpy
+torch
+torchvision
+tqdm
+scikit-video
+opencv-python
+pygame
+pymunk
+shapely
+scikit-image
+zarr
+gdown
