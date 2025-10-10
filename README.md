@@ -16,21 +16,20 @@ requirements.txt
 ## Quick start
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+conda env create -f environment.yml
+conda activate gpi
 
 python scripts/run_state_policy.py \
-  --seed 500 --max-steps 200 
+  --seed 500 --max-steps 200
 
 python scripts/run_vision_policy.py \
-  --seed 500 --max-steps 200 
-
+  --seed 500 --max-steps 200
 ```
 
 Optional: train the vision encoder/regressor.
 
 ```bash
+conda activate gpi
 python scripts/train_vision_features.py \
   --dataset models/pusht_cchi_v7_replay.zarr.zip \
   --output-dataset models/pusht_cchi_v7_replay_imgs_feature_epoch_200.zarr \
