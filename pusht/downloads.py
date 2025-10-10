@@ -12,7 +12,7 @@ import gdown
 MODELS_DIR = Path("models")
 
 _RESOURCE_MAP: Dict[str, str] = {
-    "pusht_cchi_v7_replay.zarr.zip": "1KY1InLurpMvJDRb14L9NlXT_fEsCvVUq",
+    "pusht_cchi_v7_replay.zarr.zip": "1KY1InLurpMvJDRb14L9NlXT_fEsCvVUq&confirm=t",
     "GPI_vision_model.zip": "1eq2U6Ztt1uWfucFMnEcmGJAFRzWzxc5o",
 }
 

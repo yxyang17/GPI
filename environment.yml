@@ -18,3 +18,4 @@ dependencies:
   - scikit-image=0.20.0
   - zarr=2.15.0
   - gdown=4.7.1
+  - gym=0.26.2

@@ -31,13 +31,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--obs-noise-std", type=float, default=0.01, help="Initial observation noise stddev")
     parser.add_argument("--noise-decay", type=float, default=0.995, help="Noise decay factor per step")
     parser.add_argument("--min-noise-std", type=float, default=0.001, help="Lower bound on observation noise")
-    parser.add_argument("--random-seed", type=int, default=0, help="Random seed for subset sampling")
+    parser.add_argument("--random-seed", type=int, default=0, help="Random seed")
     parser.add_argument("--memory-length", type=int, default=None, help="Number of recently used states to remember (restores old ones when exceeded)")
     parser.add_argument("--fixed-lambda1", type=float, default=1.0, help="Optional fixed lambda1 weighting")
     parser.add_argument("--fixed-lambda2", type=float, default=1.0, help="Optional fixed lambda2 weighting")
     parser.add_argument("--action-smoothing", type=float, default=0.0, help="Weight for first-order action smoothing (0 disables smoothing)")
     parser.add_argument("--video-path", type=str, default=None, help="Optional output path for rendered video")
-    parser.add_argument("--no-video", action="store_true", help="Disable video recording")
+    parser.add_argument("--no-save-video", dest="save_video", action="store_false", default=True, help="Disable video recording (saved by default)")
     parser.add_argument("--no-live-render", dest="live_render", action="store_false", help="Disable live window display during rollout")
     parser.add_argument("--quiet", action="store_true", help="Disable progress bar")
     parser.add_argument("--no-relative-action", dest="use_relative_action", action="store_false", default=True)
@@ -72,7 +72,7 @@ def main() -> None:
     evaluator = StateEvaluator(env_seed=args.seed, max_steps=args.max_steps)
     results = evaluator.evaluate(
         policy,
-        render_video=not args.no_video,
+        render_video=args.save_video,
         video_path=args.video_path,
         verbose=not args.quiet,
         live_display=args.live_render,
