@@ -20,6 +20,10 @@ from pusht.datasets import PushTImageDataset  # noqa: E402
 from gpi.vision import create_models  # noqa: E402
 from pusht.downloads import ensure_resource  # noqa: E402
 
+OBS_HORIZON = 1
+PRED_HORIZON = 1
+ACTION_HORIZON = 1
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train PushT vision encoder for GPI")
@@ -51,24 +55,6 @@ def parse_args() -> argparse.Namespace:
         "--num-workers", type=int, default=4, help="torch DataLoader worker processes."
     )
     parser.add_argument(
-        "--obs-horizon",
-        type=int,
-        default=1,
-        help="Observation horizon to sample per data point.",
-    )
-    parser.add_argument(
-        "--pred-horizon",
-        type=int,
-        default=1,
-        help="Prediction horizon provided by the dataset.",
-    )
-    parser.add_argument(
-        "--action-horizon",
-        type=int,
-        default=1,
-        help="Action horizon provided by the dataset.",
-    )
-    parser.add_argument(
         "--output-dataset",
         type=str,
         default="models/pusht_cchi_v7_replay_imgs_feature_epoch_200.zarr",
@@ -87,9 +73,9 @@ def build_dataloader(args: argparse.Namespace) -> Tuple[PushTImageDataset, DataL
     dataset_path = ensure_resource(args.dataset)
     dataset = PushTImageDataset(
         dataset_path=dataset_path,
-        pred_horizon=args.pred_horizon,
-        obs_horizon=args.obs_horizon,
-        action_horizon=args.action_horizon,
+        pred_horizon=PRED_HORIZON,
+        obs_horizon=OBS_HORIZON,
+        action_horizon=ACTION_HORIZON,
     )
     loader = DataLoader(
         dataset,

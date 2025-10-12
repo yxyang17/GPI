@@ -1,39 +1,58 @@
-# PushT GPI Policies
+# Geometry-Aware Policy Imitation (GPI) 
 
-Minimal implementation of Geometry-Aware Policy Imitation (GPI) for the PushT
-environment. Core GPI components live under `gpi/`, while PushT datasets,
-environments, and evaluation helpers sit in `pusht/`.
+Reference implementation of Geometry-Aware Policy Imitation for the PushT manipulation benchmark. The repository bundles pretrained assets, training and evaluation scripts, and lightweight tooling for reproducing the results reported in the accompanying paper.
 
-## Project layout
+## Key Features
+
+- Ready-to-run state and vision policies with automatic asset downloads.
+- Reusable GPI components for other continuous-control domains.
+- End-to-end training pipeline for the ResNet18 vision encoder.
+- Batch evaluation utilities with logging and video export.
+
+## Repository Layout
 
 ```
-gpi/          shared database, planner, and policy logic
-pusht/        PushT datasets, environments, downloads, evaluation
-scripts/      entry points for running and training policies
-requirements.txt
+gpi/          GPI database, planner, and policy abstractions
+pusht/        PushT datasets, environments, download helpers, evaluation utils
+scripts/      Entry points for training, policy rollouts, and evaluation
+models/       Default location for datasets and checkpoints (auto-populated)
+results/      Logs and rollout videos produced by evaluation scripts
+environment.yml / requirements.txt  Python dependencies (conda / pip)
 ```
 
+## Prerequisites
 
-### Installation
+- Linux or macOS with Python 3.9+
+- CUDA-capable GPU recommended for vision training and inference
+- [Conda](https://docs.conda.io/en/latest/) (preferred) or a compatible Python virtual environment
+
+## Installation
+
+Create and activate the recommended conda environment:
 
 ```bash
 conda env create -f environment.yml
 conda activate gpi
 ```
-Troubleshoots
-There might be a version mismatch between pygame pymunk zarr and gym. Make sure install the correct version. 
+## Quick Start
 
+Run the pretrained state-based policy:
 
-## Quick start
 ```bash
-python scripts/run_state_policy.py \
-  --seed 500 --max-steps 200
-
-python scripts/run_vision_policy.py \
-  --seed 500 --max-steps 200
+python scripts/run_state_policy.py --seed 500 --max-steps 200
 ```
 
-Optional: train the vision encoder/regressor.
+Run the pretrained vision policy:
+
+```bash
+python scripts/run_vision_policy.py --seed 500 --max-steps 200
+```
+
+Both scripts include extensive CLI options; append `--help` to inspect defaults and descriptions.
+
+## Training the Vision Encoder
+
+Finetune the ResNet18 state predictor to refresh the vision policy backbone:
 
 ```bash
 conda activate gpi
@@ -43,58 +62,64 @@ python scripts/train_vision_features.py \
   --checkpoint-path models/vision_state_predictor_epoch_200.ckpt
 ```
 
-Scripts automatically download missing datasets/checkpoints and expose further
-CLI knobs—run with `--help` for the full list.
+Datasets and checkpoints are auto-downloaded to `models/` when absent. Adjust the output names to avoid overwriting existing artifacts.
 
-## Policy CLI parameters
+## Batch Evaluation
 
-`scripts/run_state_policy.py` accepts a rich set of knobs so you can reproduce our experiments or explore new settings:
+Automate sweeps across random seeds or parameter grids using:
 
-- `--dataset`: input PushT replay archive (auto-downloaded into `models/`).
-- `--seed`: environment RNG seed.
-- `--max-steps`: hard cap on rollout length.
-- `--k-neighbors`: number of demonstrations blended per query state.
-- `--action-horizon`: number of steps fetched from the database per solve.
-- `--subset-size`: use a random subset of the database for faster lookups.
-- `--batch-size`: PyTorch batch size used during nearest-neighbour scoring.
-- `--device`: override the default `cuda`/`cpu` selection.
-- `--obs-noise-std`, `--noise-decay`, `--min-noise-std`, `--disable-noise`: control the stochastic exploration injected into latent states.
-- `--random-seed`: RNG seed for subset sampling and policy noise.
-- `--memory-length`: truncate the visited-state memory used to prevent loops.
-- `--fixed-lambda1`, `--fixed-lambda2`: mix the progression and attraction flows with custom weights.
-- `--action-smoothing`: exponential smoothing over the executed actions.
-- `--no-relative-action`: operate directly in absolute action space.
-- `--video-path`, `--no-save-video`: store or disable the mp4 rollout video (defaults to saving under `results/`).
-- `--no-live-render`: skip the interactive window if you are running headless.
-- `--quiet`: silence the tqdm progress indicator.
+```bash
+python scripts/run_state_evaluation.py --count 20 --max-steps 200
+python scripts/run_vision_evaluation.py --count 20 --max-steps 200
+```
 
-`scripts/run_vision_policy.py` mirrors the same interface and adds vision-specific flags:
+Key flags:
 
-- `--vision-checkpoint`: path to the ResNet18 encoder/regressor checkpoint.
-- `--dynamic-subset` / `--subset-change-interval`: periodically refresh the KNN subset.
-- `--memory-length`: positive integer to limit the loop-avoidance buffer (defaults to 500 for vision).
+- `--dataset`: input PushT replay archive (auto-downloaded if missing).
+- `--checkpoint`: ResNet18 vision checkpoint path (vision evaluation only).
+- `--count`: number of runs to generate.
+- `--random-seed`: deterministic configuration sampling.
+- `--video-dir` / `--no-save-video`: control mp4 exports (defaults to `results/`).
 
-All parameters have sensible defaults, so you can omit any flag you do not need.
+Each evaluation logs `Reward`, `Inference Time`, and `Memory` to stdout and `results/logs/`.
 
-## Batch evaluation scripts
+## Policy Configuration Reference
 
-Use `scripts/run_state_evaluation.py` and `scripts/run_vision_evaluation.py` to sweep many random configurations:
+`run_state_policy.py` exposes the full GPI planner configuration:
 
-- `--dataset` (both) and `--checkpoint` (vision): source assets for evaluation.
-- `--count`: number of random runs to generate.
-- `--max-steps`: rollout horizon for each run.
-- `--random-seed`: seed the configuration generator for repeatability.
-- `--no-save-video`: turn off mp4 export (enabled by default); pair with `--video-dir` to control the output folder.
+- `--k-neighbors`: number of demonstrations blended per query.
+- `--action-horizon`: trajectory horizon fetched from the database.
+- `--subset-size`: random subset size for approximate nearest neighbours.
+- `--batch-size`: PyTorch batch size for scoring.
+- `--device`: override automatic `cuda`/`cpu` selection.
+- `--obs-noise-std`, `--noise-decay`, `--min-noise-std`, `--disable-noise`: latent exploration controls.
+- `--random-seed`: random seed for sampling and policy noise.
+- `--memory-length`: cap the loop-avoidance buffer.
+- `--fixed-lambda1`, `--fixed-lambda2`: manually weight progression vs attraction flows.
+- `--action-smoothing`: exponential smoothing factor for actions.
+- `--no-relative-action`: operate in absolute action space.
+- `--video-path`, `--no-save-video`: manually set or disable rollout video export.
+- `--no-live-render`: disable the interactive window for headless runs.
+- `--quiet`: silence tqdm progress output.
 
-Each run prints `Reward`, `Inference Time`, and `Memory` on a single tab-aligned line and logs the same data (plus any video path) under `results/logs/`.
+`run_vision_policy.py` inherits the same options and adds:
 
-## Notes
+- `--vision-checkpoint`: ResNet18 encoder/regressor (defaults to pretrained release).
+- `--dynamic-subset` / `--subset-change-interval`: periodically refresh the KNN subset for robustness.
+- `--memory-length`: override the default vision buffer length (500).
 
-- Downloads land in `models/`.
-- Datasets should match the `.zarr` schema from diffusion-policy.
-- Vision policy expects a ResNet18 checkpoint produced by the included trainer.
-- `--no-save-video` skips mp4 generation if `skvideo.io` is unavailable.
+All options default to reproduction-ready values, so the base commands above run without additional flags.
+
+## Troubleshooting
+
+- **Dependency mismatch**: Version conflicts among `pygame`, `pymunk`, `zarr`, or `gym` can break the simulator. Verify the environment was created from `environment.yml` or align package versions with `requirements.txt`.
+- **Missing assets**: If downloads fail, clear the partial files in `models/` and re-run the command; the script retries automatically.
+- **Headless rendering**: Use `--no-live-render` to avoid opening a window on remote servers. Videos will still be written to `results/`.
+
+<!-- ## Citation
+
+If you use this codebase, please cite the Geometry-Aware Policy Imitation paper included as `GEOMETRY_AWARE_POLICY_IMITATION.pdf`.
 
 ## License
-MIT License
-The code is provided as-is for research reproduction.
+
+MIT License — provided for research and educational use without warranty. -->
