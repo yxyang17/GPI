@@ -17,14 +17,8 @@ pusht/        PushT datasets, environments, download helpers, evaluation utils
 scripts/      Entry points for training, policy rollouts, and evaluation
 models/       Default location for datasets and checkpoints (auto-populated)
 results/      Logs and rollout videos produced by evaluation scripts
-environment.yml / requirements.txt  Python dependencies (conda / pip)
+environment.yml Python dependencies 
 ```
-
-## Prerequisites
-
-- Linux or macOS with Python 3.9+
-- CUDA-capable GPU recommended for vision training and inference
-- [Conda](https://docs.conda.io/en/latest/) (preferred) or a compatible Python virtual environment
 
 ## Installation
 
@@ -85,7 +79,7 @@ Each evaluation logs `Reward`, `Inference Time`, and `Memory` to stdout and `res
 
 ## Policy Configuration Reference
 
-`run_state_policy.py` exposes the full GPI planner configuration:
+`run_state_policy.py` and `run_vision_policy.py` exposes the full GPI planner configuration:
 
 - `--k-neighbors`: number of demonstrations blended per query.
 - `--action-horizon`: trajectory horizon fetched from the database.
@@ -101,12 +95,6 @@ Each evaluation logs `Reward`, `Inference Time`, and `Memory` to stdout and `res
 - `--video-path`, `--no-save-video`: manually set or disable rollout video export.
 - `--no-live-render`: disable the interactive window for headless runs.
 - `--quiet`: silence tqdm progress output.
-
-`run_vision_policy.py` inherits the same options and adds:
-
-- `--vision-checkpoint`: ResNet18 encoder/regressor (defaults to pretrained release).
-- `--dynamic-subset` / `--subset-change-interval`: periodically refresh the KNN subset for robustness.
-- `--memory-length`: override the default vision buffer length (500).
 
 All options default to reproduction-ready values, so the base commands above run without additional flags.
 
