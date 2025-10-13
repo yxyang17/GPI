@@ -1,14 +1,6 @@
 # Geometry-Aware Policy Imitation (GPI) 
 
-<a class="highlighted-link arxiv-link" href="https://arxiv.org/abs/2510.08787" target="_blank" rel="noopener">
-  <span class="icon">📄</span><span>Paper (PDF)</span>
-</a>
-<a class="highlighted-link colab-link" href="https://github.com/yimingli1998/GPI" target="_blank" rel="noopener">
-  <span class="icon">💻</span><span>Code</span>
-</a>
-<a class="highlighted-link bibtex-link" href="#bibtex">
-  <span class="icon">📚</span><span>BibTeX</span>
-</a>
+[📄 Paper](https://arxiv.org/abs/2510.08787) | [🌐 Project Page](https://yimingli1998.github.io/projects/GPI/) | [💻 Code](https://github.com/yimingli1998/GPI) |  [📚 BibTeX](#bibtex)
 
 **Geometry-aware imitation**: GPI treats demonstrations as geometric curves, inducing distance and flow fields that make imitation **simple**, **efficient**, **flexible**, and **interpretable**.
 
