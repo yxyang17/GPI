@@ -16,16 +16,16 @@ GPI treats demonstrations as geometric curves that induces distance and flow fie
 <table>
   <tr>
     <td align="center">
-      <video src="imgs/pusht1.mp4" controls loop muted playsinline width="320"></video>
+      <img src="imgs/pusht1.gif" width="320" alt="PushT rollout 1">
     </td>
     <td align="center">
-      <video src="imgs/pusht2.mp4" controls loop muted playsinline width="320"></video>
+      <img src="imgs/pusht2.gif" width="320" alt="PushT rollout 2">
     </td>
     <td align="center">
-      <video src="imgs/multimodality_500_5.mp4" controls loop muted playsinline width="320"></video>
+      <img src="imgs/multimodality_500_5.gif" width="320" alt="PushT rollout 3">
     </td>
     <td align="center">
-      <video src="imgs/multimodality_500_17.mp4" controls loop muted playsinline width="320"></video>
+      <img src="imgs/multimodality_500_17.gif" width="320" alt="PushT rollout 4">
     </td>
   </tr>
 </table>
