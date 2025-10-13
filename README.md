@@ -121,7 +121,7 @@ Datasets and checkpoints are auto-downloaded to `models/` when absent. Adjust th
 
 ## Troubleshooting
 
-- **Dependency mismatch**: Version conflicts among `pygame`, `pymunk`, `zarr`, or `gym` can break the simulator. Verify the environment was created from `environment.yml` or align package versions with `requirements.txt`.
+- **Dependency mismatch**: Version conflicts among `pygame`, `pymunk`, `zarr`, or `gym` can break the simulator. Verify the environment was created from `environment.yml`.
 - **Missing assets**: If downloads fail, clear the partial files in `models/` and re-run the command; the script retries automatically.
 - **Headless rendering**: Use `--no-live-render` to avoid opening a window on remote servers. Videos will still be written to `results/`.
 
