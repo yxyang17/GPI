@@ -10,7 +10,9 @@
   <span class="icon">📚</span><span>BibTeX</span>
 </a>
 
-GPI treats demonstrations as geometric curves that induces distance and flow fields for simple, efficient, flexible and interpretable imitation learning.
+**Geometry-aware imitation**: GPI treats demonstrations as geometric curves, inducing distance and flow fields that make imitation **simple**, **efficient**, **flexible**, and **interpretable**.
+
+ GPI delivers multimodal behaviors with **higher success rates** and inference speeds that are **20–100× faster** than diffusion policies, while **slashing memory by orders of magnitude**.
 
 ![Main results chart](imgs/main_results.png)
 <table>
@@ -112,7 +114,8 @@ python scripts/train_vision_features.py \
   --checkpoint-path models/vision_state_predictor_epoch_200.ckpt
 ```
 
-The training script attaches a lightweight task-specific head that regresses object pose directly from each image frame. During inference we reuse this predicted pose for distance computation, so the vision policy queries the same geometry-aware metric as the state-based planner.
+The training script attaches a lightweight task-specific head that regresses object pose directly from each image frame. During inference we reuse this predicted pose for distance computation, so the vision policy queries the same geometry-aware metric as the state-based planner. However, other visual encoders for latent embeddings can also be used, such as VAEs or pretrained models.
+
 
 Datasets and checkpoints are auto-downloaded to `models/` when absent. Adjust the output names to avoid overwriting existing artifacts.
 
