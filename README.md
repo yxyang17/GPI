@@ -1,13 +1,34 @@
 # Geometry-Aware Policy Imitation (GPI) 
 
-Reference implementation of Geometry-Aware Policy Imitation for the PushT manipulation benchmark. The repository bundles pretrained assets, training and evaluation scripts, and lightweight tooling for reproducing the results reported in the accompanying paper.
+<a class="highlighted-link arxiv-link" href="https://arxiv.org/abs/2510.08787" target="_blank" rel="noopener">
+  <span class="icon">📄</span><span>Paper (PDF)</span>
+</a>
+<a class="highlighted-link colab-link" href="https://github.com/yimingli1998/GPI" target="_blank" rel="noopener">
+  <span class="icon">💻</span><span>Code</span>
+</a>
+<a class="highlighted-link bibtex-link" href="#bibtex">
+  <span class="icon">📚</span><span>BibTeX</span>
+</a>
 
-## Key Features
+GPI treats demonstrations as geometric curves that induces distance and flow fields for simple, efficient, flexible and interpretable imitation learning.
 
-- Ready-to-run state and vision policies with automatic asset downloads.
-- Reusable GPI components for other continuous-control domains.
-- End-to-end training pipeline for the ResNet18 vision encoder.
-- Batch evaluation utilities with logging and video export.
+![Main results chart](imgs/main_results.png)
+<table>
+  <tr>
+    <td align="center">
+      <video src="imgs/pusht1.mp4" controls loop muted playsinline width="320"></video>
+    </td>
+    <td align="center">
+      <video src="imgs/pusht2.mp4" controls loop muted playsinline width="320"></video>
+    </td>
+    <td align="center">
+      <video src="imgs/multimodality_500_5.mp4" controls loop muted playsinline width="320"></video>
+    </td>
+    <td align="center">
+      <video src="imgs/multimodality_500_17.mp4" controls loop muted playsinline width="320"></video>
+    </td>
+  </tr>
+</table>
 
 ## Repository Layout
 
@@ -42,23 +63,25 @@ Run the pretrained vision policy:
 python scripts/run_vision_policy.py --seed 500 --max-steps 200
 ```
 
-Both scripts include extensive CLI options; append `--help` to inspect defaults and descriptions.
+Both scripts include extensive CLI options; append `--help` to inspect defaults and descriptions:
 
-## Training the Vision Encoder
+- `--k-neighbors`: number of demonstrations blended per query.
+- `--action-horizon`: trajectory horizon fetched from the database.
+- `--subset-size`: random subset size for approximate nearest neighbours.
+- `--batch-size`: PyTorch batch size for scoring.
+- `--device`: override automatic `cuda`/`cpu` selection.
+- `--obs-noise-std`, `--noise-decay`, `--min-noise-std`, `--disable-noise`: latent exploration controls.
+- `--random-seed`: random seed for sampling and policy noise.
+- `--memory-length`: cap the loop-avoidance buffer.
+- `--fixed-lambda1`, `--fixed-lambda2`: manually weight progression vs attraction flows.
+- `--action-smoothing`: exponential smoothing factor for actions.
+- `--no-relative-action`: operate in absolute action space.
+- `--video-path`, `--no-save-video`: manually set or disable rollout video export.
+- `--no-live-render`: disable the interactive window for headless runs.
+- `--quiet`: silence tqdm progress output.
 
-Finetune the ResNet18 state predictor to refresh the vision policy backbone:
 
-```bash
-conda activate gpi
-python scripts/train_vision_features.py \
-  --dataset models/pusht_cchi_v7_replay.zarr.zip \
-  --output-dataset models/pusht_cchi_v7_replay_imgs_feature_epoch_200.zarr \
-  --checkpoint-path models/vision_state_predictor_epoch_200.ckpt
-```
-
-Datasets and checkpoints are auto-downloaded to `models/` when absent. Adjust the output names to avoid overwriting existing artifacts.
-
-## Batch Evaluation
+## Evaluation
 
 Automate sweeps across random seeds or parameter grids using:
 
@@ -77,32 +100,39 @@ Key flags:
 
 Each evaluation logs `Reward`, `Inference Time`, and `Memory` to stdout and `results/logs/`.
 
-## Policy Configuration Reference
+## Training the Vision Encoder
 
-`run_state_policy.py` and `run_vision_policy.py` exposes the full GPI planner configuration:
+Finetune the ResNet18 state predictor to refresh the vision policy backbone:
 
-- `--k-neighbors`: number of demonstrations blended per query.
-- `--action-horizon`: trajectory horizon fetched from the database.
-- `--subset-size`: random subset size for approximate nearest neighbours.
-- `--batch-size`: PyTorch batch size for scoring.
-- `--device`: override automatic `cuda`/`cpu` selection.
-- `--obs-noise-std`, `--noise-decay`, `--min-noise-std`, `--disable-noise`: latent exploration controls.
-- `--random-seed`: random seed for sampling and policy noise.
-- `--memory-length`: cap the loop-avoidance buffer.
-- `--fixed-lambda1`, `--fixed-lambda2`: manually weight progression vs attraction flows.
-- `--action-smoothing`: exponential smoothing factor for actions.
-- `--no-relative-action`: operate in absolute action space.
-- `--video-path`, `--no-save-video`: manually set or disable rollout video export.
-- `--no-live-render`: disable the interactive window for headless runs.
-- `--quiet`: silence tqdm progress output.
+```bash
+conda activate gpi
+python scripts/train_vision_features.py \
+  --dataset models/pusht_cchi_v7_replay.zarr.zip \
+  --output-dataset models/pusht_cchi_v7_replay_imgs_feature_epoch_200.zarr \
+  --checkpoint-path models/vision_state_predictor_epoch_200.ckpt
+```
 
-All options default to reproduction-ready values, so the base commands above run without additional flags.
+The training script attaches a lightweight task-specific head that regresses object pose directly from each image frame. During inference we reuse this predicted pose for distance computation, so the vision policy queries the same geometry-aware metric as the state-based planner.
+
+Datasets and checkpoints are auto-downloaded to `models/` when absent. Adjust the output names to avoid overwriting existing artifacts.
 
 ## Troubleshooting
 
 - **Dependency mismatch**: Version conflicts among `pygame`, `pymunk`, `zarr`, or `gym` can break the simulator. Verify the environment was created from `environment.yml` or align package versions with `requirements.txt`.
 - **Missing assets**: If downloads fail, clear the partial files in `models/` and re-run the command; the script retries automatically.
 - **Headless rendering**: Use `--no-live-render` to avoid opening a window on remote servers. Videos will still be written to `results/`.
+
+## BibTeX
+<a id="bibtex"></a>
+
+```bibtex
+@misc{GPI,
+Author = {Yiming Li and Nael Darwiche and Amirreza Razmjoo and Sichao Liu and Yilun Du and Auke Ijspeert and Sylvain Calinon},
+Title = {Geometry-aware Policy Imitation},
+Year = {2025},
+Eprint = {arXiv:2510.08787},
+}
+```
 
 <!-- ## Citation
 
