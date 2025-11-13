@@ -199,6 +199,56 @@ class StateDatabase:
         result = neighbor_actions[0].clone()
         result[:2] = blended
         return result.cpu().numpy()
+    
+    def knn_object(
+        self,
+        query: np.ndarray,
+        k: int,
+        lambda1: float,
+        lambda2: float,
+        exclude: Optional[Iterable[Key]] = None,
+        prefetched: Optional[Tuple[torch.Tensor, List[Key]]] = None,
+    ) -> np.ndarray:
+        if prefetched is None:
+            distances, keys = self.nearest(query, k=k, exclude=exclude)
+        else:
+            distances, keys = prefetched
+            if exclude:
+                # Prefetched distances are assumed to respect the exclusion set.
+                pass
+        if not keys:
+            return np.zeros(self._actions_full.shape[1], dtype=np.float32)
+        top = min(k, len(keys))
+        distances = distances[:top]
+        keys = keys[:top]
+        idx = torch.tensor([self._key_to_active_idx[k_] for k_ in keys], dtype=torch.long, device=self.device)
+        neighbor_states = self._states.index_select(0, idx)
+        neighbor_actions = self._actions.index_select(0, idx)
+        # Light-weight surrogate of the softmax weights w_i(x₀) from Alg.1 line 10.
+        soft_weights = 1.0 / (distances + 1e-8)
+        soft_weights = soft_weights / torch.sum(soft_weights)
+        
+        query_agent = torch.tensor(query[:2], dtype=torch.float32, device=self.device)
+        query_obs = torch.tensor(query, dtype=torch.float32, device=self.device)
+        
+        neighbor_agent = neighbor_states[:, :2]
+        neighbor_obs = neighbor_states
+        
+        # progression = neighbor_actions[:, :2] - neighbor_agent
+        progression = neighbor_obs - query_obs
+
+        # attraction = neighbor_agent - query_agent
+        attraction = neighbor_obs - query_obs
+
+        displacement = lambda1 * progression + lambda2 * attraction
+        # blended = query_agent + torch.sum(displacement * soft_weights.unsqueeze(1), dim=0)
+        blended = query_obs + torch.sum(displacement * soft_weights.unsqueeze(1), dim=0)
+        # The dataset stores 2-D actions; keep shape consistent with upstream code
+        # result = neighbor_actions[0].clone()
+        # result[:2] = blended
+        result = neighbor_obs[0].clone()
+        result += blended 
+        return result.cpu().numpy()
 
 
 __all__ = ["StateDatabase", "Key"]

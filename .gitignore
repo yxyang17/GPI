@@ -11,6 +11,7 @@ dist/
 *.egg-info/
 results/
 models/
+runs/
 *.zarr
 *.zarr.zip
 *.mp4

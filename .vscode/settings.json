@@ -1,0 +1,6 @@
+{
+  "terminal.integrated.env.linux": {
+    "PYTHONPATH": "/home/ynyg/yuxuan/GPI/GPI"
+  },
+  "python.defaultInterpreterPath": "/home/ynyg/yuxuan/GPI/gpi-env/bin/python"
+}

@@ -107,6 +107,10 @@ class PushTEpisodeDataset:
     def unnormalize_action(self, action_norm: np.ndarray) -> np.ndarray:
         return unnormalize_data(action_norm, self.stats["action"])
 
+    def unnormalize_obs(self, Xn: np.ndarray) -> np.ndarray:
+        """Revert normalisation of states back to original scale."""
+        return unnormalize_data(Xn, self.stats["obs"])
+    
     def relative_action_to_global(self, obs: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
         """Map object-centric actions back into world coordinates."""
         object_xy = obs[:, 2:4]

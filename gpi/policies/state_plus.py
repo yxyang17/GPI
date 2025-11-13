@@ -8,16 +8,44 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
+import torch
+
 from .base import GPIPolicyBase, GPIConfig
+from ...pusht_dynamics.models import InverseDynamics, ForwardDynamics
+
+# fix me: need another way to handle device
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-class StateGPIPolicy(GPIPolicyBase):
+# fix me: throw this function to util
+def load_inverse_model(ckpt_path: str, obs_dim: int, act_dim: int) -> InverseDynamics:
+    model = InverseDynamics(obs_dim, act_dim).to(DEVICE)
+    ckpt = torch.load(ckpt_path, map_location=DEVICE)
+    state = ckpt.get("model", ckpt)  # support raw or wrapped
+    model.load_state_dict(state, strict=True)
+    model.eval()
+    return model
+def load_forward_model(ckpt_path: str, obs_dim: int, act_dim: int) -> ForwardDynamics:
+    model = ForwardDynamics(obs_dim, act_dim).to(DEVICE)
+    ckpt = torch.load(ckpt_path, map_location=DEVICE)
+    state = ckpt.get("model", ckpt)  # support both raw state_dict and wrapped
+    model.load_state_dict(state)
+    model.eval()
+    return model
+
+
+class StateGPIPolicyPlus(GPIPolicyBase):
     """Implements Algorithm 1 (GPI) on state observations."""
 
     def __init__(self, config: GPIConfig, memory_length: Optional[int] = None) -> None:
         self.memory_length = memory_length
         self.recent_keys: list[tuple[int, int]] = []
         self.recent_set: set[tuple[int, int]] = set()
+        # fix me: assign model directly, but it's better get from argument or config
+        forward_model = "/home/ynyg/yuxuan/GPI/GPI/runs/forward_fp16_bs256_20251113_000413"
+        inverse_model = "/home/ynyg/yuxuan/GPI/GPI/runs/inverse_fp16_bs256_20251113_005904"
+        self.inverse_dynamics_model = load_inverse_model(inverse_model, 5*3, 2)
+        self.forward_dynamics_model = load_forward_model(forward_model, 5+2, 2)
         super().__init__(config)
 
     def _post_reset(self) -> None:
@@ -57,6 +85,44 @@ class StateGPIPolicy(GPIPolicyBase):
         self.previous_action = final_action
         self.step_count += 1
         return final_action
+
+    def get_prediction(self, observation: np.ndarray) -> np.ndarray:
+        inference_start = time.time()
+
+        # Step 1: project raw observation to the normalised latent (Alg.1 line 1).
+        current_obs = observation[-1] if observation.ndim > 1 else observation
+        current_obs = np.asarray(current_obs, dtype=np.float32)
+        normalized_obs = self._normalize_obs(current_obs)
+
+        # Optional exploration noise keeps the multi-modal behaviour.
+        noisy_obs = self.add_observation_noise(normalized_obs)
+
+        # Step 2-11: geometry-aware policy synthesis in normalised space.
+        trajs = self.get_knn_state_trajectories(
+            noisy_obs,
+            k=self.k_neighbors,
+            exclude=self.recent_set, # not sure what exclude does
+            horizon=self.action_horizon,
+            return_raw=True,
+        )
+        if trajs is None:
+            return None # np.zeros(2, dtype=np.float32)
+        
+        # prepare input for inverse model
+        print(trajs)
+        action_norm = self.inverse_dynamics_model()
+        # maybe calculate action from inverse model, adding forward jacobian for feedback
+
+        
+        action_raw = self._unnormalize_action(action_norm)
+        final_action = self._to_global_if_needed(current_obs, action_raw)
+        final_action = self._apply_action_smoothing(final_action)
+        duration = time.time() - inference_start
+        self._record_inference_time(duration)
+        self.previous_action = final_action
+        self.step_count += 1
+        return final_action
+
         
     def _compute_action_from_normalized(
         self, normalized_obs: np.ndarray

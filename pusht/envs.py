@@ -1,4 +1,5 @@
 """Lightweight PushT environments reused by GPI policies."""
+
 from __future__ import annotations
 
 from typing import Optional, Sequence, Tuple
@@ -25,7 +26,9 @@ def _to_pygame(point: Tuple[float, float], surface: pygame.Surface) -> Tuple[int
 
 
 def _light_color(color: SpaceDebugColor) -> SpaceDebugColor:
-    scaled = np.minimum(1.2 * np.float32([color.r, color.g, color.b, color.a]), np.float32([255]))
+    scaled = np.minimum(
+        1.2 * np.float32([color.r, color.g, color.b, color.a]), np.float32([255])
+    )
     return SpaceDebugColor(r=scaled[0], g=scaled[1], b=scaled[2], a=scaled[3])
 
 
@@ -37,12 +40,28 @@ class _DrawOptions(pymunk.SpaceDebugDrawOptions):
     def draw_circle(self, pos, angle, radius, outline_color, fill_color):
         center = _to_pygame(pos, self.surface)
         pygame.draw.circle(self.surface, fill_color.as_int(), center, round(radius), 0)
-        pygame.draw.circle(self.surface, _light_color(fill_color).as_int(), center, round(radius - 4), 0)
+        pygame.draw.circle(
+            self.surface,
+            _light_color(fill_color).as_int(),
+            center,
+            round(radius - 4),
+            0,
+        )
         edge = pos + Vec2d(radius, 0).rotated(angle)
-        pygame.draw.lines(self.surface, fill_color.as_int(), False, [center, _to_pygame(edge, self.surface)])
+        pygame.draw.lines(
+            self.surface,
+            fill_color.as_int(),
+            False,
+            [center, _to_pygame(edge, self.surface)],
+        )
 
     def draw_segment(self, a, b, color):
-        pygame.draw.aalines(self.surface, color.as_int(), False, [_to_pygame(a, self.surface), _to_pygame(b, self.surface)])
+        pygame.draw.aalines(
+            self.surface,
+            color.as_int(),
+            False,
+            [_to_pygame(a, self.surface), _to_pygame(b, self.surface)],
+        )
 
     def draw_fat_segment(self, a, b, radius, outline_color, fill_color):
         p1 = _to_pygame(a, self.surface)
@@ -73,10 +92,18 @@ class _DrawOptions(pymunk.SpaceDebugDrawOptions):
         pygame.draw.polygon(self.surface, _light_color(fill_color).as_int(), pts)
         if radius > 0:
             for i in range(len(verts)):
-                self.draw_fat_segment(verts[i], verts[(i + 1) % len(verts)], radius, fill_color, fill_color)
+                self.draw_fat_segment(
+                    verts[i],
+                    verts[(i + 1) % len(verts)],
+                    radius,
+                    fill_color,
+                    fill_color,
+                )
 
     def draw_dot(self, size, pos, color):
-        pygame.draw.circle(self.surface, color.as_int(), _to_pygame(pos, self.surface), round(size))
+        pygame.draw.circle(
+            self.surface, color.as_int(), _to_pygame(pos, self.surface), round(size)
+        )
 
 
 def _pymunk_to_shapely(body: pymunk.Body, shapes: Sequence[pymunk.Shape]) -> sg.Polygon:
@@ -116,7 +143,12 @@ class PushTEnv(Env):
         self.k_v = 20
         self.control_hz = self.metadata["video.frames_per_second"]
         self.legacy = legacy
-        self.observation_space = spaces.Box(low=0, high=np.array([512, 512, 512, 512, 2 * np.pi]), shape=(5,), dtype=np.float64)
+        self.observation_space = spaces.Box(
+            low=0,
+            high=np.array([512, 512, 512, 512, 2 * np.pi]),
+            shape=(5,),
+            dtype=np.float64,
+        )
         self.action_space = spaces.Box(low=0, high=512, shape=(2,), dtype=np.float64)
         self.block_cog = block_cog
         self.damping = damping
@@ -130,6 +162,15 @@ class PushTEnv(Env):
         self.render_buffer = None
         self.latest_action = None
 
+        # simulate friction
+        self.g_eff = 10.0
+        self.mu_trans = 0.0 # 0.6             # translational Coulomb-like friction coefficient#
+        self.mu_rot_visc = 0.0 # 0.05         # rotational viscous coefficient (per second)
+        self.tau_rot_coulomb = 0.0 # 0.02     # ro
+        self.mu_trans = 0.5             
+        self.mu_rot_visc = 0.1         
+        self.tau_rot_coulomb = 0.02     
+
     def reset(self):
         seed = self._seed
         self._setup()
@@ -140,13 +181,15 @@ class PushTEnv(Env):
         state = self.reset_to_state
         if state is None:
             rng = np.random.RandomState(seed=seed)
-            state = np.array([
-                rng.randint(50, 450),
-                rng.randint(50, 450),
-                rng.randint(100, 400),
-                rng.randint(100, 400),
-                rng.randn() * 2 * np.pi - np.pi,
-            ])
+            state = np.array(
+                [
+                    rng.randint(50, 450),
+                    rng.randint(50, 450),
+                    rng.randint(100, 400),
+                    rng.randint(100, 400),
+                    rng.randn() * 2 * np.pi - np.pi,
+                ]
+            )
         self._set_state(state)
         obs = self._get_obs()
         info = self._get_info()
@@ -163,10 +206,16 @@ class PushTEnv(Env):
         if action is not None:
             self.latest_action = action
             for _ in range(n_steps):
-                acceleration = self.k_p * (action - self.agent.position) + self.k_v * (Vec2d(0, 0) - self.agent.velocity)
+                acceleration = self.k_p * (action - self.agent.position) + self.k_v * (
+                    Vec2d(0, 0) - self.agent.velocity
+                )
                 self.agent.velocity += acceleration * dt
+                # apply friction
+                # self._apply_planar_friction(self.block, dt)
                 self.space.step(dt)
-        goal_geom = _pymunk_to_shapely(self._get_goal_pose_body(self.goal_pose), self.block.shapes)
+        goal_geom = _pymunk_to_shapely(
+            self._get_goal_pose_body(self.goal_pose), self.block.shapes
+        )
         block_geom = _pymunk_to_shapely(self.block, self.block.shapes)
         coverage = goal_geom.intersection(block_geom).area / goal_geom.area
         reward = np.clip(coverage / self.success_threshold, 0, 1)
@@ -215,7 +264,12 @@ class PushTEnv(Env):
         draw_options = _DrawOptions(canvas)
         goal_body = self._get_goal_pose_body(self.goal_pose)
         for shape in self.block.shapes:
-            goal_points = [pymunk.pygame_util.to_pygame(goal_body.local_to_world(v), draw_options.surface) for v in shape.get_vertices()]
+            goal_points = [
+                pymunk.pygame_util.to_pygame(
+                    goal_body.local_to_world(v), draw_options.surface
+                )
+                for v in shape.get_vertices()
+            ]
             goal_points.append(goal_points[0])
             pygame.draw.polygon(canvas, self.goal_color, goal_points)
         self.space.debug_draw(draw_options)
@@ -229,7 +283,14 @@ class PushTEnv(Env):
             coord = (np.array(self.latest_action) / 512 * 96).astype(np.int32)
             marker_size = int(8 / 96 * self.render_size)
             thickness = int(1 / 96 * self.render_size)
-            cv2.drawMarker(img, coord, color=(255, 0, 0), markerType=cv2.MARKER_CROSS, markerSize=marker_size, thickness=thickness)
+            cv2.drawMarker(
+                img,
+                coord,
+                color=(255, 0, 0),
+                markerType=cv2.MARKER_CROSS,
+                markerSize=marker_size,
+                thickness=thickness,
+            )
         return img
 
     def close(self):
@@ -264,11 +325,19 @@ class PushTEnv(Env):
     def _set_state_local(self, state_local):
         agent_pos_local = state_local[:2]
         block_pose_local = state_local[2:]
-        tf_img_obj = st.AffineTransform(translation=self.goal_pose[:2], rotation=self.goal_pose[2])
-        tf_obj_new = st.AffineTransform(translation=block_pose_local[:2], rotation=block_pose_local[2])
+        tf_img_obj = st.AffineTransform(
+            translation=self.goal_pose[:2], rotation=self.goal_pose[2]
+        )
+        tf_obj_new = st.AffineTransform(
+            translation=block_pose_local[:2], rotation=block_pose_local[2]
+        )
         tf_img_new = st.AffineTransform(matrix=tf_img_obj.params @ tf_obj_new.params)
         agent_pos_new = tf_img_new(agent_pos_local)
-        new_state = np.array(list(agent_pos_new[0]) + list(tf_img_new.translation) + [tf_img_new.rotation])
+        new_state = np.array(
+            list(agent_pos_new[0])
+            + list(tf_img_new.translation)
+            + [tf_img_new.rotation]
+        )
         self._set_state(new_state)
         return new_state
 
@@ -285,6 +354,7 @@ class PushTEnv(Env):
             self._add_segment((5, 506), (506, 506), 2),
         ]
         self.space.add(*walls)
+        
         self.agent = self.add_circle((256, 400), 15)
         self.block = self.add_tee((256, 300), 0)
         self.goal_color = pygame.Color("LightGreen")
@@ -309,6 +379,8 @@ class PushTEnv(Env):
         body.friction = 1
         shape = pymunk.Circle(body, radius)
         shape.color = pygame.Color("RoyalBlue")
+        # shape.friction = 1.0         # pusher–block grip
+        # shape.elasticity = 0.0
         self.space.add(body, shape)
         return body
 
@@ -319,16 +391,41 @@ class PushTEnv(Env):
         body.position = position
         shape = pymunk.Poly.create_box(body, (height, width))
         shape.color = pygame.Color("LightSlateGray")
+
+        # shape.friction = 0.8         # pusher–block grip
+        # shape.elasticity = 0.0
+
         self.space.add(body, shape)
         return body
 
-    def add_tee(self, position, angle, scale=30, color="LightSlateGray", mask=pymunk.ShapeFilter.ALL_MASKS()):
+    def add_tee(
+        self,
+        position,
+        angle,
+        scale=30,
+        color="LightSlateGray",
+        mask=pymunk.ShapeFilter.ALL_MASKS(),
+    ):
         mass = 1
         length = 4
-        vertices1 = [(-length * scale / 2, scale), (length * scale / 2, scale), (length * scale / 2, 0), (-length * scale / 2, 0)]
-        inertia1 = pymunk.moment_for_poly(mass, vertices=vertices1)
-        vertices2 = [(-scale / 2, scale), (-scale / 2, length * scale), (scale / 2, length * scale), (scale / 2, scale)]
-        inertia2 = pymunk.moment_for_poly(mass, vertices=vertices1)
+        vertices1 = [
+            (-length * scale / 2, scale), 
+            (length * scale / 2, scale),
+            (length * scale / 2, 0),
+            (-length * scale / 2, 0),
+        ]
+        # [(-60.0, 30), (60.0, 30), (60.0, 0), (-60.0, 0)]   width: 120, height 30
+
+        inertia1 = pymunk.moment_for_poly(mass*1, vertices=vertices1)
+        vertices2 = [
+            (-scale / 2, scale),
+            (-scale / 2, length * scale),
+            (scale / 2, length * scale),
+            (scale / 2, scale),
+        ]
+        # [(-15.0, 30), (-15.0, 120), (15.0, 120), (15.0, 30)] weight 30, height 90
+        inertia2 = pymunk.moment_for_poly(mass*1, vertices=vertices1)
+        # inertia2 = pymunk.moment_for_poly(mass*1, vertices=vertices2)
         body = pymunk.Body(mass, inertia1 + inertia2)
         shape1 = pymunk.Poly(body, vertices1)
         shape2 = pymunk.Poly(body, vertices2)
@@ -336,23 +433,67 @@ class PushTEnv(Env):
         shape2.color = pygame.Color(color)
         shape1.filter = pymunk.ShapeFilter(mask=mask)
         shape2.filter = pymunk.ShapeFilter(mask=mask)
-        body.center_of_gravity = (shape1.center_of_gravity + shape2.center_of_gravity) / 2
+        body.center_of_gravity = (
+            shape1.center_of_gravity + shape2.center_of_gravity
+        ) / 2
+        # body.center_of_gravity = shape1.center_of_gravity
         body.position = position
         body.angle = angle
         body.friction = 1.0
+        # for s in (shape1, shape2):
+        #     s.friction = 0.9
+        #     s.elasticity = 0.0
         self.space.add(body, shape1, shape2)
         return body
+
+    # ------------------------------------------------------------------
+    # Floor-less planar friction model (Coulomb-like + rotational drag)
+    # ------------------------------------------------------------------
+    def _apply_planar_friction(self, body: pymunk.Body, dt: float):
+        """
+        Apply a translational friction force (≈ μ m g, opposite velocity)
+        and rotational friction (viscous + Coulomb-like) to a single body.
+        Works without a floor shape. Stable for PushT at 100 Hz.
+        """
+        # --- Translational Coulomb-like friction
+        v = body.velocity
+        speed = v.length
+        if speed > 1e-3:
+            F_mag = self.mu_trans * body.mass * self.g_eff
+            F = -F_mag * (v / speed)
+            com_world = body.local_to_world(body.center_of_gravity)
+            print(F)
+            body.apply_force_at_world_point(F, com_world)
+
+        # --- Rotational friction: viscous (∝ ω) + Coulomb-like (sign(ω))
+        w = body.angular_velocity
+        tau = 0.0
+        # viscous: scale by moment so tuning is geometry agnostic
+        tau += -self.mu_rot_visc * body.moment * w
+        if abs(w) > 1e-3:
+            tau += -self.tau_rot_coulomb * np.sign(w)
+        body.torque += tau
 
 
 class PushTImageEnv(PushTEnv):
     metadata = {"render.modes": ["rgb_array"], "video.frames_per_second": 10}
 
-    def __init__(self, legacy: bool = False, block_cog=None, damping=None, render_size: int = 96):
-        super().__init__(legacy=legacy, block_cog=block_cog, damping=damping, render_size=render_size, render_action=False)
+    def __init__(
+        self, legacy: bool = False, block_cog=None, damping=None, render_size: int = 96
+    ):
+        super().__init__(
+            legacy=legacy,
+            block_cog=block_cog,
+            damping=damping,
+            render_size=render_size,
+            render_action=False,
+        )
         ws = self.window_size
         self.observation_space = spaces.Dict(
             {
-                "image": spaces.Box(low=0, high=1, shape=(3, render_size, render_size), dtype=np.float32),
+                "image": spaces.Box(
+                    low=0, high=1, shape=(3, render_size, render_size), dtype=np.float32
+                ),
                 "agent_pos": spaces.Box(low=0, high=ws, shape=(2,), dtype=np.float32),
             }
         )
@@ -364,13 +505,24 @@ class PushTImageEnv(PushTEnv):
         obs = {
             "image": np.moveaxis(img.astype(np.float32) / 255, -1, 0),
             "agent_pos": agent_pos,
-            "obs_all": np.array(tuple(self.agent.position) + tuple(self.block.position) + (self.block.angle % (2 * np.pi),)),
+            "obs_all": np.array(
+                tuple(self.agent.position)
+                + tuple(self.block.position)
+                + (self.block.angle % (2 * np.pi),)
+            ),
         }
         if self.latest_action is not None:
             coord = (np.array(self.latest_action) / 512 * 96).astype(np.int32)
             marker_size = int(8 / 96 * self.render_size)
             thickness = int(1 / 96 * self.render_size)
-            cv2.drawMarker(img, coord, color=(255, 0, 0), markerType=cv2.MARKER_CROSS, markerSize=marker_size, thickness=thickness)
+            cv2.drawMarker(
+                img,
+                coord,
+                color=(255, 0, 0),
+                markerType=cv2.MARKER_CROSS,
+                markerSize=marker_size,
+                thickness=thickness,
+            )
         self.render_cache = img
         return obs
 

@@ -1,4 +1,5 @@
 """Evaluation helpers for GPI policies."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -45,9 +46,13 @@ class StateEvaluator:
         rewards: list[float] = []
         capture_frames = render_video or live_display
         initial_frame = self.env.render(mode="rgb_array") if capture_frames else None
-        frames: list[np.ndarray] = [initial_frame] if (render_video and initial_frame is not None) else []
+        frames: list[np.ndarray] = (
+            [initial_frame] if (render_video and initial_frame is not None) else []
+        )
         if live_display and initial_frame is not None:
-            cv2.imshow("PushT State Policy", cv2.cvtColor(initial_frame, cv2.COLOR_RGB2BGR))
+            cv2.imshow(
+                "PushT State Policy", cv2.cvtColor(initial_frame, cv2.COLOR_RGB2BGR)
+            )
             cv2.waitKey(1)
         done = False
         step_idx = 0
@@ -56,6 +61,14 @@ class StateEvaluator:
             while not done and step_idx < self.max_steps:
                 current_obs = np.stack(obs_deque)
                 action = policy.get_action(current_obs)
+                action_slice = slice(0, 2)
+                object_slice = slice(2, 4)
+                # policy.plot_knn_state_trajectories(
+                #     obs, k=2, pos_slice=object_slice, show_points=True, show_mean=True
+                # )
+                # policy.plot_knn_state_trajectories(
+                #     obs, k=2, pos_slice=action_slice, show_points=True, show_mean=True
+                # )
                 obs, reward, done, _, _ = self.env.step(action)
                 obs_deque.append(obs)
                 rewards.append(float(reward))
@@ -64,7 +77,9 @@ class StateEvaluator:
                     if render_video:
                         frames.append(frame)
                     if live_display:
-                        cv2.imshow("PushT State Policy", cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+                        cv2.imshow(
+                            "PushT State Policy", cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                        )
                         cv2.waitKey(1)
                 step_idx += 1
                 if verbose:
@@ -112,9 +127,13 @@ class VisionEvaluator:
         policy.reset()
         capture_frames = render_video or live_display
         initial_frame = self.env.render(mode="rgb_array") if capture_frames else None
-        frames: list[np.ndarray] = [initial_frame] if (render_video and initial_frame is not None) else []
+        frames: list[np.ndarray] = (
+            [initial_frame] if (render_video and initial_frame is not None) else []
+        )
         if live_display and initial_frame is not None:
-            cv2.imshow("PushT Vision Policy", cv2.cvtColor(initial_frame, cv2.COLOR_RGB2BGR))
+            cv2.imshow(
+                "PushT Vision Policy", cv2.cvtColor(initial_frame, cv2.COLOR_RGB2BGR)
+            )
             cv2.waitKey(1)
         rewards: list[float] = []
         done = False
@@ -135,13 +154,20 @@ class VisionEvaluator:
                     if render_video:
                         frames.append(frame)
                     if live_display:
-                        cv2.imshow("PushT Vision Policy", cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+                        cv2.imshow(
+                            "PushT Vision Policy",
+                            cv2.cvtColor(frame, cv2.COLOR_RGB2BGR),
+                        )
                         cv2.waitKey(1)
                 step_idx += 1
                 if verbose:
                     pbar.update(1)
                     pbar.set_postfix(reward=f"{reward:.3f}")
-        inference_stats = policy.get_full_inference_stats() if hasattr(policy, "get_full_inference_stats") else policy.get_inference_stats()
+        inference_stats = (
+            policy.get_full_inference_stats()
+            if hasattr(policy, "get_full_inference_stats")
+            else policy.get_inference_stats()
+        )
         video_out = None
         if render_video and frames:
             if video_path is None:

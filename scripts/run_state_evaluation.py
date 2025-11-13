@@ -88,15 +88,26 @@ def generate_configs(count: int, seed: Optional[int]) -> list[EvaluationConfig]:
         repeats = (count // len(env_seed_pool)) + 1
         env_seeds = (env_seed_pool * repeats)[:count]
     for idx, env_seed in enumerate(env_seeds):
+        # configs.append(
+        #     EvaluationConfig(
+        #         name=f"state_run_{idx:02d}",
+        #         seed=env_seed,
+        #         k_neighbors=rng.choice([3, 4, 5, 6, 7, 8]),
+        #         action_horizon=rng.randint(1, 16),
+        #         obs_noise_std=round(rng.uniform(0.0, 0.02), 4),
+        #         random_seed=rng.randint(0, 1000),
+        #         action_smoothing=round(rng.uniform(0.0, 0.4), 3),
+        #     )
+        # )
         configs.append(
             EvaluationConfig(
                 name=f"state_run_{idx:02d}",
                 seed=env_seed,
-                k_neighbors=rng.choice([3, 4, 5, 6, 7, 8]),
-                action_horizon=rng.randint(1, 16),
-                obs_noise_std=round(rng.uniform(0.0, 0.02), 4),
+                k_neighbors=3,
+                action_horizon=2,
+                obs_noise_std=0.0,
                 random_seed=rng.randint(0, 1000),
-                action_smoothing=round(rng.uniform(0.0, 0.4), 3),
+                action_smoothing=0.2,
             )
         )
     return configs

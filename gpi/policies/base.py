@@ -136,6 +136,9 @@ class GPIPolicyBase:
     # ------------------------------------------------------------------
     # Helper conversions
     # ------------------------------------------------------------------
+    def _unnormalize_obs(self, obs_norm: np.ndarray) -> np.ndarray:
+        return self.dataset.unnormalize_obs(obs_norm)
+    
     def _normalize_obs(self, obs: np.ndarray) -> np.ndarray:
         return self.dataset.normalize_obs(obs)
 
