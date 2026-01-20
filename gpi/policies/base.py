@@ -32,6 +32,7 @@ class GPIConfig:
     action_horizon: int = 1
     fixed_lambda1: Optional[float] = None
     fixed_lambda2: Optional[float] = None
+    detect_contact: bool = False
     debug: bool = False
 
 
@@ -73,7 +74,8 @@ class GPIPolicyBase:
         self.fixed_lambda1 = config.fixed_lambda1
         self.fixed_lambda2 = config.fixed_lambda2
         self.action_smoothing = float(config.action_smoothing) if config.action_smoothing is not None else 0.0
-        self.debug = config.debug if hasattr(config, 'debug') else False
+        
+        self.debug = config.debug
         if self.action_smoothing < 0.0:
             raise ValueError("action_smoothing must be non-negative")
         if self.use_relative_action:

@@ -10,6 +10,7 @@ import time
 
 from .base import GPIPolicyBase, GPIConfig
 
+from pusht.datasets import draw_pusht_T_rectangles
 
 class StateGPIPolicy(GPIPolicyBase):
     """Implements Algorithm 1 (GPI) on state observations."""
@@ -19,6 +20,9 @@ class StateGPIPolicy(GPIPolicyBase):
         self.recent_keys: list[tuple[int, int]] = []
         self.recent_set: set[tuple[int, int]] = set()
         super().__init__(config)
+
+        # for debugging
+        self.planned_traj: Optional[np.ndarray] = None
 
     def _post_reset(self) -> None:
         self.recent_keys.clear()
@@ -49,13 +53,62 @@ class StateGPIPolicy(GPIPolicyBase):
         action_norm = self._compute_action_from_normalized(noisy_obs)
         if action_norm is None:
             return np.zeros(2, dtype=np.float32)
+        
+        # ynyg: my doubt, should unnormalize action using action stats or observation stats?
+        # I try to fixed it in _compute_action_from_normalized
         action_raw = self._unnormalize_action(action_norm)
-        final_action = self._to_global_if_needed(current_obs, action_raw)
-        final_action = self._apply_action_smoothing(final_action)
+
+        final_action_unsmooth = self._to_global_if_needed(current_obs, action_raw)
+        final_action = self._apply_action_smoothing(final_action_unsmooth)
+
+        print(f"action_raw: {action_raw}")
+        print(f"final_action_unsmooth: {final_action_unsmooth}")
+        print(f"final_action: {final_action}")
         duration = time.time() - inference_start
         self._record_inference_time(duration)
         self.previous_action = final_action
         self.step_count += 1
+
+        if self.debug:
+            pred_traj = self.planned_traj
+            fig, ax = plt.subplots(figsize=(6,6))
+            plan_np = pred_traj[0].copy()
+            agent_pos = current_obs[:2]
+            object_pos = current_obs[2:4]
+            object_ori = current_obs[4]
+            object_pos_in_demo = plan_np[2:4]
+            object_ori_in_demo = plan_np[4]
+            ax.plot(pred_traj[:, 0], pred_traj[:, 1], 'r-', label='agent traj')
+            ax.plot(pred_traj[:, 2], pred_traj[:, 3], 'b-', label='object traj')
+            ax.scatter(final_action_unsmooth[0], final_action_unsmooth[1], c='pink', marker='+', s=100, label='Final Action before smoothing')
+            ax.scatter(final_action[0], final_action[1], c='r', marker='x', s=100, label='Final Action')
+            ax.scatter(agent_pos[0], agent_pos[1], c='r', marker='o', s=100, label='Agent')
+            ax.scatter(object_pos[0], object_pos[1], c='lightblue', marker='o', s=100, label='Object')
+            ax.scatter(plan_np[0], plan_np[1], c='orange', marker='x', s=100, label='Agent in demo')
+            ax.scatter(plan_np[2], plan_np[3], c='blue', marker='o', s=100, label='Object in demo')
+
+            # draw current block
+            draw_pusht_T_rectangles(ax, object_pos[0], object_pos[1], object_ori, facecolor="lightblue", alpha=0.5)
+            # draw target block
+            draw_pusht_T_rectangles(ax, 256, 256, np.pi / 4, facecolor="LightGreen", alpha=0.5)
+            # draw block in demo
+            draw_pusht_T_rectangles(ax, object_pos_in_demo[0], object_pos_in_demo[1], object_ori_in_demo, facecolor="blue", alpha=0.5)
+
+            ax.legend()
+            ax.set_title('Plan and Final Action')
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            ax.grid(True)
+            ax.set_xlim(0, 512)
+            ax.set_ylim(512, 0)  # invert y by ordering high->low (better than invert_yaxis)
+            # ax.set_xlim(-256, 256)
+            # ax.set_ylim(256, -256)  # invert y by ordering high->low (better than invert_yaxis)
+            ax.set_aspect("equal", adjustable="box")
+            ax.margins(0)
+            ax.set_autoscale_on(False)
+            plt.show()
+
+
         return final_action
         
     def _compute_action_from_normalized(
@@ -81,8 +134,22 @@ class StateGPIPolicy(GPIPolicyBase):
                 exclude=self.recent_set,
                 prefetched=(distances, keys),
             )
-            self._consume_key(keys[0])
+
+            if self.debug:
+                # my debugging code to visualize trajectory
+                start_key = keys[0]
+                next_key = start_key
+                epi, start_t = start_key
+                sample = self.dataset[epi]  # {'obs': normalized_obs, 'action': normalized_action}
+                Xn = np.asarray(sample["obs"], dtype=np.float32)
+                t0 = int(np.clip(start_t, 0, len(Xn) - 1))
+                Xsel_n = Xn[t0:]
+                Xsel_n = self.dataset.unnormalize_obs(Xsel_n)
+                self.planned_traj = Xsel_n
+             
+            self._consume_key(keys[0])   
             return action_norm
+        
         if self.plan.empty():
             # Step 5-6: pick the demonstration/time with minimal combined distance.
             _, keys = self.database.nearest(

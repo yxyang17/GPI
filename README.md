@@ -1,5 +1,37 @@
 # GPI + feedback
 
+# create virtual environment
+sudo apt install python3.10-venv
+python3 -m venv gpi-env
+
+# install all requirments.
+cd GPI
+pip install -r requirements.txt 
+
+
+# example command
+ python scripts/run_state_policy_plus.py --seed 501 --max-steps 200 --action-horizon 1 --k-neighbors 1 --fixed-lambda2 1  --use-object-centric-frame --debug
+
+# the problem in original repo:
+in knn_action where it calculate progression and attraction, it was done in normalized space.
+The problem is in progresion: progression = neighbor_actions[:, :2] - neighbor_agent
+neighbor_actions and neighbor_agent are action and obs, they have different stats
+It is not principle a big problem because the stats are very similar and progression is very small number. It doesn't affects, but once increase the lambda of progression, the difference shows up.
+Or may problem is 
+```    
+progression = neighbor_actions[:, :2] - neighbor_agent
+attraction = neighbor_agent - query_agent
+displacement = lambda1 * progression + lambda2 * attraction
+blended = query_agent + torch.sum(displacement * soft_weights.unsqueeze(1), dim=0)
+```
+when lambda1 = 1, lambda2 = 1, only one trajectory, 
+then blended = neighbor_action
+
+
+
+when without --no-relative-action, there is some problem also in progression. The problem is agent is in global frame while actions is in local frame.
+Similar as before, if blended = neighbor_action, the action is based on the orientation in the demo, which is usually not the same as orientation in the current object. The more different the orientation and pos, the more strange the action. The action should follow the trajectory in a most similar demo, but it will not be.
+
 
 # the following is from the original repo
 # Geometry-Aware Policy Imitation (GPI) 

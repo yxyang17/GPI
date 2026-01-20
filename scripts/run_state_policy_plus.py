@@ -45,6 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--use-object-centric-frame", dest="use_object_centric_frame", action="store_true", default=False)
     parser.add_argument("--disable-noise", dest="enable_obs_noise", action="store_false", default=True)
     parser.add_argument("--debug", action="store_true", help="Enable debug mode with verbose output", default=False)
+    parser.add_argument("--detect-contact", dest="detect_contact", action="store_true", default=False, help="Enable contact detection")
     parser.set_defaults(live_render=True)
     return parser.parse_args()
 
@@ -70,6 +71,7 @@ def main() -> None:
         fixed_lambda1=args.fixed_lambda1,
         fixed_lambda2=args.fixed_lambda2,
         action_smoothing=args.action_smoothing,
+        detect_contact=args.detect_contact,
         debug=args.debug,
     )
     memory_length = args.memory_length if args.memory_length and args.memory_length > 0 else None

@@ -49,10 +49,15 @@ class InverseDynamicsContactDataset(Dataset):
         for ei in range(len(self.base)):
             ep = self.base[ei]
             obs, act = ep["obs"], ep["action"]
+            is_contact = ep.get("is_contact", None)
+
+            if is_contact is None:
+                raise ValueError("is_contact data is required for InverseDynamicsContactDataset")
+            
             T, Ta = len(obs), len(act)
             for t in range(1, T - 1):
                 if t < Ta and (t + 1) < T:
-                    if obs[t-1,-1] > 0.5 and obs[t,-1] > 0.5 and obs[t+1,-1] > 0.5:  # only sample when in contact, it should be -1 and 1 (1 is contact)
+                    if is_contact[t-1] > 0.5 and is_contact[t] > 0.5 and is_contact[t+1] > 0.5:  # only sample when in contact, it should be -1 and 1 (1 is contact)
                         self.indices.append((ei, t))
 
     def __len__(self) -> int:
@@ -111,9 +116,14 @@ class ForwardDynamicsContactDataset(Dataset):
         for ei in range(len(self.base)):
             ep = self.base[ei]
             obs, act = ep["obs"], ep["action"]
+            is_contact = ep.get("is_contact", None)
+
+            if is_contact is None:
+                raise ValueError("is_contact data is required for ForwardDynamicsContactDataset")
+            
             T, Ta = len(obs), len(act)
             for t in range(0, T - 1):
-                if t < Ta and obs[t,-1] > 0.5:
+                if t < Ta and is_contact[t] > 0.5:
                     # only sample when in contact, it should be -1 and 1 (1 is contact)
                     # only consider t with contact, maybe t +1 should/not need to be in contact
                     self.indices.append((ei, t))

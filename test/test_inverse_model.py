@@ -156,10 +156,7 @@ def main():
     use_object_centric_frame = True
     # use_object_centric_frame = Fa clse
 
-    run_dir = "runs/inverse_fp16_bs256_20251113_005904" 
-    run_dir = "runs/inverse_fp16_bs256_20251113_183159" 
-    run_dir = "runs/inverse_re_bs512_20251210_235709"
-    run_dir = "runs/inverse_re_bs512_20251215_225843"
+    run_dir = "runs/inverse_abs_contact_True_bs512_lr0.001_20260120_002813" 
       # <-- set to your inverse run
     ckpt_dir = os.path.join(run_dir, "checkpoints")
     ckpt_path = pick_checkpoint(ckpt_dir)
@@ -169,7 +166,7 @@ def main():
     base_ds = load_episode_dataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame)
 
     # which episode
-    epi_idx = 150
+    epi_idx = 15
 
     # ---- infer dims from that episode ----
     ep = base_ds[epi_idx]

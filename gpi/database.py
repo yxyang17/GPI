@@ -187,6 +187,7 @@ class StateDatabase:
         if not keys:
             return np.zeros(self._actions_full.shape[1], dtype=np.float32)
         top = min(k, len(keys))
+        print("k neighbors, k =",k)
         distances = distances[:top]
         keys = keys[:top]
         idx = torch.tensor([self._key_to_active_idx[k_] for k_ in keys], dtype=torch.long, device=self.device)
@@ -195,12 +196,44 @@ class StateDatabase:
         # Light-weight surrogate of the softmax weights w_i(x₀) from Alg.1 line 10.
         soft_weights = 1.0 / (distances + 1e-8)
         soft_weights = soft_weights / torch.sum(soft_weights)
+        
+        # ynyg: original code where the computation is done in normalized space
         query_agent = torch.tensor(query[:2], dtype=torch.float32, device=self.device)
         neighbor_agent = neighbor_states[:, :2]
         progression = neighbor_actions[:, :2] - neighbor_agent
         attraction = neighbor_agent - query_agent
         displacement = lambda1 * progression + lambda2 * attraction
         blended = query_agent + torch.sum(displacement * soft_weights.unsqueeze(1), dim=0)
+        blended_orig = blended.cpu().numpy()
+
+        # ynyg: my test, where I try it in unnormalized space
+        # verdict, the original one is principly wrong, but due to progression is super small, this doesn't add to much difference
+        # query_unnorm = self.dataset.unnormalize_obs(query)
+        # query_agent_unnorm = torch.tensor(query_unnorm[:2], dtype=torch.float32, device=self.device)
+        # neighbor_agent_unnorm = self.dataset.unnormalize_obs(neighbor_states.cpu().numpy())[:, :2]
+        # neighbor_agent_unnorm = torch.tensor(neighbor_agent_unnorm, dtype=torch.float32, device=self.device)
+        # neighbor_actions_unnorm = self.dataset.unnormalize_action(neighbor_actions.cpu().numpy())
+        # neighbor_actions_unnorm = torch.tensor(neighbor_actions_unnorm, dtype=torch.float32, device=self.device)
+        # progression_unnorm = neighbor_actions_unnorm - neighbor_agent_unnorm
+        # attraction_unnorm = neighbor_agent_unnorm - query_agent_unnorm
+        # displacement_unnorm = lambda1 * progression_unnorm + lambda2 * attraction_unnorm
+        # blended_unnorm = query_agent_unnorm + torch.sum(displacement_unnorm * soft_weights.unsqueeze(1), dim=0)
+        # blended = self.dataset.normalize_action(blended_unnorm.cpu().numpy()) # blended is action, put it in normalized space for action, it will be unnormalized later
+        # blended = torch.tensor(blended, dtype=torch.float32, device=self.device)
+
+        # print(f"attraction_unnorm: {attraction_unnorm.cpu().numpy()}")
+        # print(f"progression_unnorm: {progression_unnorm.cpu().numpy()}")
+        # print(f"displacement_unnorm: {displacement_unnorm.cpu().numpy()}")
+        # print(f"current query_agent_unnorm: {query_agent_unnorm.cpu().numpy()}")
+        # print(f"blended_unnorm: {blended_unnorm.cpu().numpy()}")
+        # print("blended cal in normalized space  :", blended_orig)
+        # print("blended cal in unnormalized space:", blended.cpu().numpy())
+
+        # blended_orig_unnorm = self.dataset.unnormalize_action(blended_orig)
+        # print("blended cal unnormalized in normalized space  :", blended_orig_unnorm)
+        # print("blended cal unnormalized in unnormalized space:", blended_unnorm.cpu().numpy())
+
+
         # The dataset stores 2-D actions; keep shape consistent with upstream code
         result = neighbor_actions[0].clone()
         result[:2] = blended
@@ -258,7 +291,9 @@ class StateDatabase:
         soft_weights = 1.0 / (distances + 1e-8)
         soft_weights = soft_weights / torch.sum(soft_weights)
         
-        # query_agent = torch.tensor(query[:2], dtype=torch.float32, device=self.device)
+        # ynyg: I change the next action to next state for progression calculation, then it's okay.
+        # but still need to pay attention if it is in object centric space
+        # query_agent = torch.tensor(query[:2], dtype=torch.float32, device=self.device)        
         query_obs = torch.tensor(query, dtype=torch.float32, device=self.device)
         
         # neighbor_agent = neighbor_states[:, :2]

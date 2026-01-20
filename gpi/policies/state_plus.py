@@ -6,6 +6,9 @@ from typing import Optional, List, Dict, Any, Tuple
 from collections import deque
 import os, glob, torch, re
 
+from matplotlib.patches import Rectangle
+from matplotlib.transforms import Affine2D
+
 import matplotlib.pyplot as plt
 import numpy as np
 import time
@@ -14,6 +17,7 @@ import torch
 
 from .base import GPIPolicyBase, GPIConfig
 from pusht_dynamics.models import InverseDynamics, ForwardDynamics
+from pusht.datasets import detect_contact_pusht, detect_contact_pusht, draw_pusht_T_rectangles, create_pusht_pts
 
 # fix me: need another way to handle device
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -60,15 +64,14 @@ class StateGPIPolicyPlus(GPIPolicyBase):
         self.recent_keys: list[tuple[int, int]] = []
         self.recent_set: set[tuple[int, int]] = set()
         # fix me: assign model directly, but it's better get from argument or config
-        forward_model = "/home/ynyg/yuxuan/GPI/GPI/runs/forward_fp16_bs256_20251113_000413"
+        forward_model = "/home/ynyg/yuxuan/GPI/GPI/runs/forward_abs_contact_True_bs512_lr0.001_20260120_003613"
         
         if config.use_relative_action:
             print("Using relative action inverse model.")
-            inverse_model = "/home/ynyg/yuxuan/GPI/GPI/runs/inverse_re_bs512_20251118_000822"
             inverse_model = "/home/ynyg/yuxuan/GPI/GPI/runs/inverse_re_bs512_20251215_225843"
         elif not config.use_relative_action:
             print("Using absolute action inverse model.")
-            inverse_model = "/home/ynyg/yuxuan/GPI/GPI/runs/inverse_abs_bs512_20251118_001116"
+            inverse_model = "/home/ynyg/yuxuan/GPI/GPI/runs/inverse_abs_contact_True_bs512_lr0.001_20260120_002813"
         else:
             raise ValueError("config.use_relative_action must be bool")
         forward_ckpt_dir = os.path.join(forward_model, "checkpoints")
@@ -89,8 +92,14 @@ class StateGPIPolicyPlus(GPIPolicyBase):
         self.magic_episode = None
         self.magic_step = None
 
-
+        
         super().__init__(config)
+
+
+        self.detect_contact = config.detect_contact
+        if self.detect_contact:
+            print("Contact detection is enabled in StateGPIPolicyPlus.")
+            self.object_pcd = create_pusht_pts(1024 * 5, self.random_seed)
 
     def _post_reset(self) -> None:
         self.recent_keys.clear()
@@ -162,17 +171,25 @@ class StateGPIPolicyPlus(GPIPolicyBase):
         
         prev_obs_ts = torch.as_tensor(self.prev_obs, dtype=torch.float32, device=DEVICE).unsqueeze(0)
         noisy_obs_ts = torch.as_tensor(noisy_obs, dtype=torch.float32, device=DEVICE).unsqueeze(0)
-        plan = torch.as_tensor(plan, dtype=torch.float32, device=DEVICE).unsqueeze(0)        
         # print("prev_obs_ts", self._unnormalize_obs(prev_obs_ts.detach().cpu().numpy()))
         # print("noisy_obs_ts", self._unnormalize_obs(noisy_obs_ts.detach().cpu().numpy()))
         # print("plan", self._unnormalize_obs(plan.detach().cpu().numpy()))
-        action_norm = self.inverse_dynamics_model(prev_obs_ts, noisy_obs_ts, plan)
+
+        # ynyg test: use inverse model to get actio
+        # plan_ts = torch.as_tensor(plan, dtype=torch.float32, device=DEVICE).unsqueeze(0)        
+        # action_norm = self.inverse_dynamics_model(prev_obs_ts, noisy_obs_ts, plan_ts)
+        # action_norm = action_norm.detach().cpu().numpy().squeeze(0)
+        # action_raw = self._unnormalize_action(action_norm)
+
+        # ynyg test: use gpi to get action
+        action_raw = self._unnormalize_obs(plan[None,:])[0,:2]
         self.prev_obs = noisy_obs
+
+
         # maybe calculate action from inverse model, adding forward jacobian for feedback
 
-        action_norm = action_norm.detach().cpu().numpy().squeeze(0)
 
-        action_raw = self._unnormalize_action(action_norm)
+        
         # print("action_raw", action_raw)
         final_action = self._to_global_if_needed(current_obs, action_raw)
         # print("final_action", final_action)
@@ -183,28 +200,78 @@ class StateGPIPolicyPlus(GPIPolicyBase):
         self.previous_action = final_action
         self.step_count += 1
 
+        if self.detect_contact:
+            ax, ay, ox, oy, oa = current_obs
+            is_c, _ = detect_contact_pusht(
+                finger_pos=np.array([ax, ay], dtype=np.float64),
+                obj_pos_world=np.array([ox, oy], dtype=np.float64),
+                obj_rad=float(oa),
+                fin_rad=float(15),
+                margin=float(3),
+                pts_num=int(1024 * 5),
+                use_object_centric_frame=self.dataset.use_object_centric_frame,
+                seed=int(self.random_seed),
+                object_pcd=self.object_pcd,
+            )
         # show plan and final action in plot
         if self.debug:
+            print(f"is contact: {is_c}")
             print(f"current key: {self.curr_key_adjusted}; original: {self.curr_key_original}; previous: {self.prev_key};\n")
             fig, ax = plt.subplots(figsize=(6,6))
-            plan_np = plan.detach().cpu().numpy().squeeze(0)
+            plan_np = plan
             plan_np = self._unnormalize_obs(plan_np)
             agent_pos = current_obs[:2]
             object_pos = current_obs[2:4]
-            ax.plot(pred_traj[:, 0], pred_traj[:, 1], 'r-', label='agent traj')
-            ax.plot(pred_traj[:, 2], pred_traj[:, 3], 'g-', label='object traj')
+            object_ori = current_obs[4]
+            object_pos_in_demo = plan_np[2:4]
+            object_ori_in_demo = plan_np[4]
+            ax.plot(pred_traj[:, 0], pred_traj[:, 1], color = 'orange', label='agent traj')
+            ax.plot(pred_traj[:, 2], pred_traj[:, 3], color = 'green', label='object traj')
             ax.scatter(action_raw[0], action_raw[1], c='r', marker='x', s=100, label='Final Action')
-            ax.scatter(agent_pos[0], agent_pos[1], c='r', marker='o', s=100, label='Agent')
+            if is_c:
+                ax.scatter(agent_pos[0], agent_pos[1], c='r', marker='o', s=100, label='Agent')
+            else:
+                ax.scatter(agent_pos[0], agent_pos[1], c='orange', marker='o', s=100, label='Agent')
             ax.scatter(object_pos[0], object_pos[1], c='g', marker='o', s=100, label='Object')
             ax.scatter(plan_np[0], plan_np[1], c='orange', marker='x', s=100, label='Plan agent')
             ax.scatter(plan_np[2], plan_np[3], c='blue', marker='o', s=100, label='Plan object')
+
+            # # draw T block
+            # def draw_pusht_T_rectangles(ax, ox, oy, oa, facecolor="lightblue", alpha=0.5, edgecolor=None):
+            #     """
+            #     Draw PushT T-block as two rectangles in world frame.
+            #     Object-frame geometry matches create_pusht_pts():
+            #     - bottom bar: x [-60,60], y [0,30]
+            #     - stem:       x [-15,15], y [30,120]
+            #     """
+            #     # Object-frame rectangles (defined by lower-left corner, width, height)
+            #     rect_bottom = Rectangle((-60, 0), 120, 30, facecolor=facecolor, alpha=alpha, edgecolor=edgecolor)
+            #     rect_stem   = Rectangle((-15, 30), 30, 90, facecolor=facecolor, alpha=alpha, edgecolor=edgecolor)
+
+            #     # Transform: rotate around object-frame origin (0,0), then translate to (ox,oy)
+            #     # print(f"affine2d: {Affine2D().rotate(oa).translate(ox, oy)}")
+            #     T = Affine2D().rotate(oa).translate(ox, oy) + ax.transData    
+            #     # print(f"ax.transData: {ax.transData}")
+            #     # print(f"T: {T}")
+
+            #     rect_bottom.set_transform(T)
+            #     rect_stem.set_transform(T)
+
+            #     ax.add_patch(rect_bottom)
+            #     ax.add_patch(rect_stem)
+            draw_pusht_T_rectangles(ax, object_pos[0], object_pos[1], object_ori, facecolor="lightblue", alpha=0.5)
+            # draw target block
+            draw_pusht_T_rectangles(ax, 256, 256, np.pi / 4, facecolor="LightGreen", alpha=0.5)
+            # draw block in demo
+            draw_pusht_T_rectangles(ax, object_pos_in_demo[0], object_pos_in_demo[1], object_ori_in_demo, facecolor="blue", alpha=0.5)
+
             ax.legend()
             ax.set_title('Plan and Final Action')
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
             ax.grid(True)
-            # ax.set_xlim(0, 512)
-            # ax.set_ylim(512, 0)  # invert y by ordering high->low (better than invert_yaxis)
+            ax.set_xlim(0, 512)
+            ax.set_ylim(512, 0)  # invert y by ordering high->low (better than invert_yaxis)
             # ax.set_xlim(-256, 256)
             # ax.set_ylim(256, -256)  # invert y by ordering high->low (better than invert_yaxis)
             ax.set_aspect("equal", adjustable="box")
@@ -255,8 +322,8 @@ class StateGPIPolicyPlus(GPIPolicyBase):
             )
 
             # fix me: need better hanlding of skip recent set
-            if pred_traj.shape[0] > 4:
-                self._consume_key(keys[0])
+            # if pred_traj.shape[0] > 4:
+            self._consume_key(keys[0])
             # else:
             #     print("Pred traj length <=1, not consuming key.")
             self.prev_key = self.curr_key_adjusted

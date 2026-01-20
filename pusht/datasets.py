@@ -33,6 +33,7 @@ class DataStats:
 
 
 def compute_stats(array: np.ndarray) -> DataStats:
+    print(f"array min, max: {array.min(axis=0)}, {array.max(axis=0)}")
     return DataStats(min=array.min(axis=0), max=array.max(axis=0))
 
 
@@ -102,12 +103,14 @@ def detect_contact_pusht(
     pts_num: int = 1024 * 5,
     use_object_centric_frame: bool = False,
     seed: int = 0,
+    object_pcd: np.ndarray = None,
 ) -> tuple[bool, float]:
     """
     Repo-style PushT contact heuristic.
     Returns (is_contact, min_dist) where min_dist is in object-frame units.
     """
-    object_pcd = create_pusht_pts(pts_num, seed)
+    if object_pcd is None:
+        object_pcd = create_pusht_pts(pts_num, seed)
 
     if not use_object_centric_frame:
         # finger -> object frame
@@ -124,7 +127,7 @@ def detect_contact_pusht(
     is_contact = (min_dist < float(fin_rad + margin))
     return is_contact, min_dist
 
-
+# function name needs change
 def append_is_contact_to_traj(
     traj: np.ndarray,      # (N,5) [ax,ay,ox,oy,oa]
     fin_rad: float,
@@ -141,8 +144,7 @@ def append_is_contact_to_traj(
     assert traj.ndim == 2 and traj.shape[1] == 5, f"traj dim is {traj.shape} but traj must be (N,5) [ax,ay,ox,oy,oa]"
     N = traj.shape[0]
 
-    out = np.empty((N, 6), dtype=dtype)
-    out[:, :5] = traj.astype(dtype, copy=False)
+    out = np.empty((N, 1), dtype=dtype)
 
     for i in range(N):
         ax, ay, ox, oy, oa = traj[i]
@@ -156,12 +158,12 @@ def append_is_contact_to_traj(
             use_object_centric_frame=use_object_centric_frame,
             seed=int(seed),
         )
-        out[i, 5] = 1.0 if is_c else 0.0
+        out[i, 0] = 1.0 if is_c else 0.0
 
     return out
 #################################################
 
-def draw_pusht_T_rectangles(ax, ox, oy, oa, facecolor="lightblue", alpha=0.5, edgecolor=None):
+def draw_pusht_T_rectangles(ax, ox, oy, oa, facecolor="lightblue", alpha=0.5, edgecolor=None, label=None):
     """
     Draw PushT T-block as two rectangles in world frame.
     Object-frame geometry matches create_pusht_pts():
@@ -282,11 +284,11 @@ class PushTEpisodeDataset:
             obs_t = torch.from_numpy(obs.astype(np.float32))
             # fix me: I should handle this slice in the function, not here
             # this part should be obs = ...
-            obs[:, :2] = self.global_state_to_relative(obs_t).numpy()
+            obs[:, :2] = self.global_state_to_relative(obs_t, obs_t[:, :2]).numpy()
 
         if calculate_contact:
         # not the most efficient way, but simple trail to implement
-            traj_with_contact = append_is_contact_to_traj(
+            detected_contacts = append_is_contact_to_traj(
                 traj=obs,
                 fin_rad=15.0,
                 margin=3.0,
@@ -295,7 +297,6 @@ class PushTEpisodeDataset:
                 seed=0,
                 dtype=np.float32,
             )
-            obs = traj_with_contact
             # print("test 0", obs[:161,-1])
             # visualize for debug    
             # for t in range(0, obs.shape[0],5):
@@ -316,6 +317,7 @@ class PushTEpisodeDataset:
                 {
                     "action": actions[start:end].astype(np.float32, copy=False),
                     "obs": obs[start:end].astype(np.float32, copy=False),
+                    "is_contact": detected_contacts[start:end].astype(bool, copy=False) if calculate_contact else None,
                 }
             )
             start = int(end)
@@ -334,6 +336,7 @@ class PushTEpisodeDataset:
         return {
             "action": self.normalize_action(sample["action"]),
             "obs": self.normalize_obs(sample["obs"]),
+            "is_contact": sample["is_contact"],
         }
 
     def normalize_obs(self, obs: np.ndarray) -> np.ndarray:

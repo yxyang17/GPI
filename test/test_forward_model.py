@@ -42,7 +42,7 @@ def evaluate_episode(model: torch.nn.Module, dataset, epi_idx: int, print_every:
     Returns dict with per-step MSE and overall MSE.
     """
     episode = dataset[epi_idx]
-    obs_np = episode["obs"]
+    obs_np = episode["obs"][:, :5]  # exclude last dim if it's contact info
     act_np = episode["action"]
     T, Ta = len(obs_np), len(act_np)
 
@@ -86,13 +86,13 @@ def evaluate_episode(model: torch.nn.Module, dataset, epi_idx: int, print_every:
     pred_next_array = dataset.unnormalize_obs(pred_next_array)
 
     # Plot 1: Object trajectories (ground truth vs predicted)
-    axes[0].plot(obs_np[:, 0], obs_np[:, 1], 'b-', linewidth=2, label='GT Object 1', alpha=0.7)
-    axes[0].plot(obs_np[:, 2], obs_np[:, 3], 'g-', linewidth=2, label='GT Object 2', alpha=0.7)
-    axes[0].plot(pred_next_array[:, 0], pred_next_array[:, 1], 'r--', linewidth=2, label='Pred Object 1')
-    axes[0].plot(pred_next_array[:, 2], pred_next_array[:, 3], 'm--', linewidth=2, label='Pred Object 2')
-    axes[0].scatter(obs_np[0, 0], obs_np[0, 1], c='blue', s=100, marker='o', zorder=5)
+    axes[0].plot(obs_np[:, 0], obs_np[:, 1], 'b-', linewidth=2, label='GT pusher', alpha=0.7)
+    axes[0].plot(obs_np[:, 2], obs_np[:, 3], 'g-', linewidth=2, label='GT Object', alpha=0.7)
+    axes[0].plot(pred_next_array[:, 0], pred_next_array[:, 1], 'r--', linewidth=2, label='Pred pusher')
+    axes[0].plot(pred_next_array[:, 2], pred_next_array[:, 3], 'm--', linewidth=2, label='Pred Object')
+    axes[0].scatter(obs_np[0, 0], obs_np[0, 1], c='blue', s=100, marker='o', zorder=5, label='Start')
     axes[0].scatter(obs_np[0, 2], obs_np[0, 3], c='green', s=100, marker='o', zorder=5)
-    axes[0].scatter(obs_np[-1, 0], obs_np[-1, 1], c='blue', s=100, marker='x', zorder=5)
+    axes[0].scatter(obs_np[-1, 0], obs_np[-1, 1], c='blue', s=100, marker='x', zorder=5, label='End')
     axes[0].scatter(obs_np[-1, 2], obs_np[-1, 3], c='green', s=100, marker='x', zorder=5)
     axes[0].set_title('Object Trajectories (Ground Truth vs Predicted)')
     axes[0].set_xlabel('X')
@@ -128,14 +128,16 @@ def main():
     # ---- config ----
     dataset_path = "models/pusht_cchi_v7_replay.zarr.zip"
     use_relative_action = False
+    use_object_centric_frame = False
+    calculate_contact = True
     # Point to your run directory created by the training script:
-    run_dir = "runs/forward_fp16_bs256_20251113_000413"   # <-- set this
+    run_dir = "runs/forward_abs_contact_True_bs512_lr0.001_20260120_003613"   # <-- set this
     ckpt_dir = os.path.join(run_dir, "checkpoints")
     ckpt_path = pick_checkpoint(ckpt_dir)  # picks the best by filename loss
     print(f"Using checkpoint: {ckpt_path}")
 
     # ---- load a base episode dataset (normalized already) ----
-    base_ds = load_episode_dataset(dataset_path, use_relative_action=use_relative_action)
+    base_ds = load_episode_dataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame, calculate_contact=calculate_contact)
 
     # Pick one episode index to evaluate:
     epi_idx = 0  # change as needed
