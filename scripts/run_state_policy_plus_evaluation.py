@@ -22,7 +22,6 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
 from gpi.policies.base import GPIConfig
-from gpi.policies.state import StateGPIPolicy
 from gpi.policies.state_plus import StateGPIPolicyPlus
 from pusht.datasets import load_episode_dataset
 from pusht.evaluation import StateEvaluator
@@ -38,7 +37,6 @@ class EvaluationConfig:
     random_seed: int
     action_smoothing: float
     use_relative_action: bool
-    policy: str = "state"
 
 
 @dataclass
@@ -79,7 +77,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-relative-action", dest="use_relative_action", action="store_false", default=True)
     parser.add_argument("--disable-noise", dest="enable_obs_noise", action="store_false", default=True)
     parser.add_argument("--debug", action="store_true", help="Enable debug mode with verbose output", default=False)
-    parser.add_argument("--policy", type=str, default="state", choices=["state", "state_plus"], help="Choose which policy to evaluate.")
     return parser.parse_args()
 
 
@@ -101,7 +98,7 @@ def set_global_seed(seed: Optional[int]) -> None:
     torch.use_deterministic_algorithms(True, warn_only=True)
 
 
-def generate_configs(count: int, seed: Optional[int], policy: str, use_relative_action: bool = False) -> list[EvaluationConfig]:
+def generate_configs(count: int, seed: Optional[int]) -> list[EvaluationConfig]:
     rng_seed = seed if seed is not None else random.randrange(1 << 30)
     rng = random.Random(rng_seed)
     configs: list[EvaluationConfig] = []
@@ -129,13 +126,11 @@ def generate_configs(count: int, seed: Optional[int], policy: str, use_relative_
                 name=f"state_run_{idx:02d}",
                 seed=env_seed,
                 k_neighbors=1,
-                #action_horizon=rng.randint(1, 16),
-                action_horizon=4,
+                action_horizon=1,
                 obs_noise_std=round(rng.uniform(0.0, 0.02), 4),
                 random_seed=rng.randint(0, 1000),
                 action_smoothing=round(rng.uniform(0.0, 0.4), 3),
-                use_relative_action=use_relative_action,
-                policy=policy,
+                use_relative_action=False
             )
         )
     return configs
@@ -181,12 +176,7 @@ def run_evaluation_run(
         action_smoothing=config.action_smoothing,
         device="cuda" if torch is not None and torch.cuda.is_available() else None,
     )
-    if config.policy == "state_plus":
-        print("Evaluating StateGPIPolicyPlus...")
-        policy = StateGPIPolicyPlus(gpi_config)
-    else:
-        print("Evaluating StateGPIPolicy...")
-        policy = StateGPIPolicy(gpi_config)
+    policy = StateGPIPolicyPlus(gpi_config)
     evaluator = StateEvaluator(env_seed=config.seed, max_steps=max_steps)
     gpu_after_init = gpu_allocated_mb()
     gpu_memory_mb = max(0.0, gpu_after_init - baseline_gpu)
@@ -254,9 +244,8 @@ def main() -> None:
 
     seed = args.random_seed
     set_global_seed(seed)
-    use_relative_action = args.use_relative_action
-    print(f"Using use_relative_action={use_relative_action} for all runs.")
-    configs = generate_configs(args.count, seed, args.policy, use_relative_action)
+
+    configs = generate_configs(args.count, seed)
     summaries: list[tuple[EvaluationConfig, EvaluationResult]] = []
 
     steps_list = []
@@ -286,9 +275,7 @@ def main() -> None:
     print(f"Average reward: {np.mean(rewards_list):.3f}")
     print(f"Average inference time: {np.mean(inference_times_list):.2f} ms")
     print(f"Average GPU memory: {np.mean(memory_list):.3f} MB")
-    print(f"success rate (99): {(np.array(rewards_list) >= 0.99).sum()}/{len(rewards_list)}")
-    print(f"success rate (95): {(np.array(rewards_list) >= 0.95).sum()}/{len(rewards_list)}")
-    print(f"success rate (90): {(np.array(rewards_list) >= 0.90).sum()}/{len(rewards_list)}")
+    print(f"success rate: {(np.array(rewards_list) >= 0.99).sum()}/{len(rewards_list)}")
 
 
 if __name__ == "__main__":

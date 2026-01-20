@@ -1,3 +1,7 @@
+# GPI + feedback
+
+
+# the following is from the original repo
 # Geometry-Aware Policy Imitation (GPI) 
 
 [📄 Paper](https://arxiv.org/abs/2510.08787) | [🌐 Project Page](https://yimingli1998.github.io/projects/GPI/) | [💻 Code](https://github.com/yimingli1998/GPI) |  [📚 BibTeX](#bibtex)

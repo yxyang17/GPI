@@ -89,7 +89,8 @@ class StateEvaluator:
         video_out = None
         if render_video and frames:
             if video_path is None:
-                video_path = f"results/state_policy_{self.env_seed}.mp4"
+                policy_type = policy.__class__.__name__
+                video_path = f"results/{policy_type}_policy/{policy_type}_policy_{self.env_seed}.mp4"
             directory = os.path.dirname(video_path)
             if directory:
                 os.makedirs(directory, exist_ok=True)

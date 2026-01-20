@@ -4,7 +4,7 @@ import torch.nn as nn
 from datetime import datetime
 from tqdm import tqdm
 
-from datasets import InverseDynamicsDataset
+from datasets import InverseDynamicsContactDataset
 from models import InverseDynamics
 from utils import (
     make_fast_loader, make_writer, get_lr,
@@ -21,13 +21,16 @@ dataset_path = "models/pusht_cchi_v7_replay.zarr.zip"
 # fix me: two important settings for data processing
 use_relative_action = False
 use_object_centric_frame = False
+use_relative_action = True
+use_object_centric_frame = True
+calculate_contact = True
 
 epochs = 500
 batch_size = 512
 lr = 1e-3
 val_ratio = 0.2
 relative = "re" if use_relative_action else "abs"
-run_name = f"inverse_{relative}_bs{batch_size}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+run_name = f"inverse_{relative}_contact_{calculate_contact}_bs{batch_size}_lr{lr}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 # ---- device + AMP for RTX 2080 Ti (FP16) ----
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print("Using device:", device)
@@ -37,10 +40,10 @@ scaler = torch.amp.GradScaler(enabled=(device == "cuda"))
 torch.backends.cudnn.benchmark = False  # ok for MLPs/CNNs with steady shapes
 
 # ---- data ----
-base = load_episode_dataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame)
+base = load_episode_dataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame, calculate_contact=calculate_contact)
 base_train, base_val = split_episodes(base, val_ratio=val_ratio, seed=42)
-train_ds = InverseDynamicsDataset(base_train)
-val_ds   = InverseDynamicsDataset(base_val)
+train_ds = InverseDynamicsContactDataset(base_train)
+val_ds   = InverseDynamicsContactDataset(base_val)
 train_loader = make_fast_loader(train_ds, batch_size=batch_size, shuffle=True)
 val_loader   = make_fast_loader(val_ds,   batch_size=batch_size, shuffle=False)
 

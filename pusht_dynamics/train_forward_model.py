@@ -17,9 +17,12 @@ from pusht.datasets import load_episode_dataset
 
 # ---- config ----
 dataset_path = "models/pusht_cchi_v7_replay.zarr.zip"
+
 use_relative_action = False
+use_object_centric_frame = False
+
 epochs = 500
-batch_size = 256
+batch_size = 512
 lr = 1e-3
 val_ratio = 0.2
 run_name = f"forward_fp16_bs{batch_size}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -32,13 +35,13 @@ scaler = torch.amp.GradScaler(enabled=(device == "cuda"))
 torch.backends.cudnn.benchmark = False
 
 # --- data ---
-base = load_episode_dataset(dataset_path, use_relative_action=use_relative_action)
+base = load_episode_dataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame)
 base_train, base_val = split_episodes(base, val_ratio=val_ratio, seed=42)
 train_ds = ForwardDynamicsDataset(base_train)
 val_ds   = ForwardDynamicsDataset(base_val)
 train_loader = make_fast_loader(train_ds, batch_size=batch_size, shuffle=True)
 val_loader   = make_fast_loader(val_ds,   batch_size=batch_size, shuffle=False)
-
+print("Train episodes:", len(base_train), "Val episodes:", len(base_val))
 
 # ---- model ----
 s = next(iter(train_loader))
@@ -46,6 +49,7 @@ obs_dim = int(s["o_curr"].view(s["o_curr"].shape[0], -1).shape[-1])
 act_dim = int(s["action"].view(s["action"].shape[0], -1).shape[-1])
 
 model = ForwardDynamics(obs_dim, act_dim).to(device)
+
 try:
     model = torch.compile(model, mode="max-autotune")
 except Exception:

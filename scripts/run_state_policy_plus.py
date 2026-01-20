@@ -13,6 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from gpi.policies.base import GPIConfig
 from gpi.policies.state_plus import StateGPIPolicyPlus
+# from gpi.policies.state import StateGPIPolicy
 from pusht.datasets import load_episode_dataset
 from pusht.evaluation import StateEvaluator
 from pusht.downloads import ensure_resource
@@ -41,7 +42,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-live-render", dest="live_render", action="store_false", help="Disable live window display during rollout")
     parser.add_argument("--quiet", action="store_true", help="Disable progress bar")
     parser.add_argument("--no-relative-action", dest="use_relative_action", action="store_false", default=True)
+    parser.add_argument("--use-object-centric-frame", dest="use_object_centric_frame", action="store_true", default=False)
     parser.add_argument("--disable-noise", dest="enable_obs_noise", action="store_false", default=True)
+    parser.add_argument("--debug", action="store_true", help="Enable debug mode with verbose output", default=False)
     parser.set_defaults(live_render=True)
     return parser.parse_args()
 
@@ -53,6 +56,7 @@ def main() -> None:
         dataset_path=args.dataset,
         dataset_loader=load_episode_dataset,
         use_relative_action=args.use_relative_action,
+        use_object_centric_frame=args.use_object_centric_frame,
         k_neighbors=args.k_neighbors,
         obs_noise_std=args.obs_noise_std,
         enable_obs_noise=args.enable_obs_noise,
@@ -66,9 +70,11 @@ def main() -> None:
         fixed_lambda1=args.fixed_lambda1,
         fixed_lambda2=args.fixed_lambda2,
         action_smoothing=args.action_smoothing,
+        debug=args.debug,
     )
     memory_length = args.memory_length if args.memory_length and args.memory_length > 0 else None
     policy = StateGPIPolicyPlus(config, memory_length=memory_length)
+    # policy = StateGPIPolicy(config, memory_length=memory_length)
     evaluator = StateEvaluator(env_seed=args.seed, max_steps=args.max_steps)
     results = evaluator.evaluate(
         policy,

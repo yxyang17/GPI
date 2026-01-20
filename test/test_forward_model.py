@@ -7,6 +7,9 @@ from pusht_dynamics.models import ForwardDynamics
 # from pusht.datasets import load_episode_dataset
 from pusht.datasets import load_episode_dataset
 
+
+import matplotlib.pyplot as plt
+
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 def pick_checkpoint(ckpt_dir: str):
@@ -74,8 +77,6 @@ def evaluate_episode(model: torch.nn.Module, dataset, epi_idx: int, print_every:
     pred_next_array = np.concatenate(pred_next_list, axis=0)  # [valid_T, obs_dim]
     
     # Create visualization
-    import matplotlib.pyplot as plt
-    
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     
     # Plot action trajectory

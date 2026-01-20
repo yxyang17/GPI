@@ -18,6 +18,7 @@ class GPIConfig:
     dataset_loader: Optional[Callable[[str, bool], EpisodeDataset]] = None
     to_global_action: Optional[Callable[[np.ndarray, np.ndarray], np.ndarray]] = None
     use_relative_action: bool = True
+    use_object_centric_frame: bool = False
     action_smoothing: float = 0.0
     k_neighbors: int = 3
     obs_noise_std: float = 0.01
@@ -31,6 +32,7 @@ class GPIConfig:
     action_horizon: int = 1
     fixed_lambda1: Optional[float] = None
     fixed_lambda2: Optional[float] = None
+    debug: bool = False
 
 
 class GPIPolicyBase:
@@ -49,6 +51,7 @@ class GPIPolicyBase:
         self.dataset = config.dataset_loader(
             config.dataset_path,
             use_relative_action=config.use_relative_action,
+            use_object_centric_frame=config.use_object_centric_frame
         )
         self.to_global_action = config.to_global_action
         self.database = StateDatabase(
@@ -70,10 +73,13 @@ class GPIPolicyBase:
         self.fixed_lambda1 = config.fixed_lambda1
         self.fixed_lambda2 = config.fixed_lambda2
         self.action_smoothing = float(config.action_smoothing) if config.action_smoothing is not None else 0.0
+        self.debug = config.debug if hasattr(config, 'debug') else False
         if self.action_smoothing < 0.0:
             raise ValueError("action_smoothing must be non-negative")
         if self.use_relative_action:
             if self.to_global_action is None and hasattr(self.dataset, "relative_action_to_global"):
+                if self.debug:
+                    print("PIPolicyBase: use relative action, use relative_action_to_global")
                 self.to_global_action = getattr(self.dataset, "relative_action_to_global")
             if self.to_global_action is None:
                 raise ValueError("Relative action conversion required when use_relative_action=True")
@@ -152,12 +158,15 @@ class GPIPolicyBase:
         previous = np.asarray(self.previous_action, dtype=np.float32)
         smoothed = (action + smoothing * previous) / (1.0 + smoothing)
         return smoothed.astype(np.float32, copy=False)
+    
 
     def _to_global_if_needed(self, obs: np.ndarray, action: np.ndarray) -> np.ndarray:
         if not self.use_relative_action:
             return action
         if self.to_global_action is None:
             raise RuntimeError("to_global_action not set despite use_relative_action=True")
+        if self.debug:
+            print("GPIPolicyBase: convert to global action")
         obs_arr = np.asarray(obs, dtype=np.float32)
         action_arr = np.asarray(action, dtype=np.float32)
         try:

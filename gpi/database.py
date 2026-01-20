@@ -156,6 +156,12 @@ class StateDatabase:
         filtered = distances.masked_fill(~mask, float("inf"))
         top = min(k, available)
         values, indices = torch.topk(filtered, top, largest=False)
+
+        # fix me: for debug, find the best one before filtering
+        best_value, best_index = torch.min(distances, dim=0)
+        best_key = self._keys[best_index.item()]
+        # print(f"Best key before filtering: {best_key}")
+
         finite_mask = torch.isfinite(values)
         values = values[finite_mask]
         selected_indices = indices[finite_mask]
@@ -208,7 +214,8 @@ class StateDatabase:
         lambda2: float,
         exclude: Optional[Iterable[Key]] = None,
         prefetched: Optional[Tuple[torch.Tensor, List[Key]]] = None,
-    ) -> np.ndarray:
+    #) -> np.ndarray:
+    ) -> Tuple[np.ndarray, np.ndarray]:
         if prefetched is None:
             distances, keys = self.nearest(query, k=k, exclude=exclude)
         else:
@@ -223,19 +230,42 @@ class StateDatabase:
         keys = keys[:top]
         idx = torch.tensor([self._key_to_active_idx[k_] for k_ in keys], dtype=torch.long, device=self.device)
         neighbor_states = self._states.index_select(0, idx)
+        
+        ### get future states for progression calculation
+        results = []
+        for d, (epi, t) in zip(distances, keys):
+            sample = self.dataset[
+                epi
+                ]  # {'obs': normalized_obs, 'action': normalized_action}
+            Xn = np.asarray(sample["obs"], dtype=np.float32)
+            if Xn.ndim != 2 or Xn.size == 0:
+                continue
+            t0 = int(np.clip(t, 0, len(Xn) - 1))
+            Xsel_n = Xn[t0:]
+            Xsel_n = self.dataset.unnormalize_obs(Xsel_n)
+
+        ###########
+        next_key = (keys[0][0], keys[0][1] + 1)  # only use the nearest neighbor for future state
+        if next_key in self._key_to_active_idx:
+            # fix me: todo, handle multiples keys
+            next_idx = torch.tensor([self._key_to_active_idx[next_key]], dtype=torch.long, device=self.device)
+        else:
+            # end of episode — use current state
+            next_idx = idx
+        neighbor_states_future = self._states.index_select(0, next_idx)
         neighbor_actions = self._actions.index_select(0, idx)
         # Light-weight surrogate of the softmax weights w_i(x₀) from Alg.1 line 10.
         soft_weights = 1.0 / (distances + 1e-8)
         soft_weights = soft_weights / torch.sum(soft_weights)
         
-        query_agent = torch.tensor(query[:2], dtype=torch.float32, device=self.device)
+        # query_agent = torch.tensor(query[:2], dtype=torch.float32, device=self.device)
         query_obs = torch.tensor(query, dtype=torch.float32, device=self.device)
         
-        neighbor_agent = neighbor_states[:, :2]
+        # neighbor_agent = neighbor_states[:, :2]
         neighbor_obs = neighbor_states
         
         # progression = neighbor_actions[:, :2] - neighbor_agent
-        progression = neighbor_obs - query_obs
+        progression = neighbor_states_future - neighbor_obs
 
         # attraction = neighbor_agent - query_agent
         attraction = neighbor_obs - query_obs
@@ -246,9 +276,9 @@ class StateDatabase:
         # The dataset stores 2-D actions; keep shape consistent with upstream code
         # result = neighbor_actions[0].clone()
         # result[:2] = blended
-        result = neighbor_obs[0].clone()
-        result += blended 
-        return result.cpu().numpy()
+        # result = query_obs.clone()
+        result = blended 
+        return result.cpu().numpy(), Xsel_n
 
 
 __all__ = ["StateDatabase", "Key"]

@@ -13,10 +13,10 @@ class InverseDynamics(nn.Module):
     def __init__(self, obs_dim, act_dim):
         super().__init__()
         hidden = (256, 256, 256)
-        self.net = mlp(3*obs_dim, act_dim, hidden=hidden)
+        self.net = mlp(3*obs_dim-2, act_dim, hidden=hidden)
 
     def forward(self, o_prev, o_curr, o_next):
-        x = torch.cat([o_prev, o_curr, o_next], dim=-1)
+        x = torch.cat([o_prev, o_curr, o_next[:, 2:]], dim=-1) # fix me: maybe o_next[:, 2:] needs to be changed (no slice here but directly get from argument)
         return self.net(x)
 
 class ForwardDynamics(nn.Module):
