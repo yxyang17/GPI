@@ -135,6 +135,7 @@ def append_is_contact_to_traj(
     pts_num: int = 1024 * 5,
     use_object_centric_frame: bool = False,
     seed: int = 0,
+    object_pcd: np.ndarray = None,
     dtype=np.float32,
 ) -> np.ndarray:
     """
@@ -156,6 +157,7 @@ def append_is_contact_to_traj(
             margin=float(margin),
             pts_num=int(pts_num),
             use_object_centric_frame=use_object_centric_frame,
+            object_pcd=object_pcd,
             seed=int(seed),
         )
         out[i, 0] = 1.0 if is_c else 0.0
@@ -250,7 +252,7 @@ def visualize_pusht_obs(
 class PushTEpisodeDataset:
     """Episode-wise PushT demonstrations with symmetric normalisation."""
 
-    def __init__(self, dataset_path: str, use_relative_action: bool = False, use_object_centric_frame: bool = False, calculate_contact: bool = False) -> None:
+    def __init__(self, dataset_path: str, use_relative_action: bool = False, use_object_centric_frame: bool = False, detect_contact: bool = False) -> None:
         root = zarr.open(dataset_path, mode="r")
         actions = root["data"]["action"][:]
         obs = root["data"]["state"][:]
@@ -265,7 +267,7 @@ class PushTEpisodeDataset:
         #     mask[-1] = 0
         # else:
         #     mask = np.zeros(obs_f.shape[0], dtype=np.uint8)
-        print("Dataset use_relative_action:", use_relative_action, "use_object_centric_frame:", use_object_centric_frame, "calculate_contact:", calculate_contact)
+        print("Dataset use_relative_action:", use_relative_action, "use_object_centric_frame:", use_object_centric_frame, "detect_contact:", detect_contact)
         print("obs shape:", obs.shape, "actions shape:", actions.shape)
         
 
@@ -273,7 +275,7 @@ class PushTEpisodeDataset:
         
         self.use_relative_action = use_relative_action
         self.use_object_centric_frame = use_object_centric_frame
-        self.calculate_contact = calculate_contact
+        self.detect_contact = detect_contact
         
         if self.use_relative_action:
             obs_t = torch.from_numpy(obs.astype(np.float32))
@@ -286,8 +288,9 @@ class PushTEpisodeDataset:
             # this part should be obs = ...
             obs[:, :2] = self.global_state_to_relative(obs_t, obs_t[:, :2]).numpy()
 
-        if calculate_contact:
-        # not the most efficient way, but simple trail to implement
+        if detect_contact:
+        # not the most efficient way, but simple trail to implement            
+            self.object_pcd = create_pusht_pts(1024 * 5) # random seed
             detected_contacts = append_is_contact_to_traj(
                 traj=obs,
                 fin_rad=15.0,
@@ -295,6 +298,7 @@ class PushTEpisodeDataset:
                 pts_num=1024 * 5,
                 use_object_centric_frame=use_object_centric_frame,
                 seed=0,
+                object_pcd=self.object_pcd,
                 dtype=np.float32,
             )
             # print("test 0", obs[:161,-1])
@@ -317,7 +321,7 @@ class PushTEpisodeDataset:
                 {
                     "action": actions[start:end].astype(np.float32, copy=False),
                     "obs": obs[start:end].astype(np.float32, copy=False),
-                    "is_contact": detected_contacts[start:end].astype(bool, copy=False) if calculate_contact else None,
+                    "is_contact": detected_contacts[start:end].astype(bool, copy=False) if detect_contact else None,
                 }
             )
             start = int(end)
@@ -442,19 +446,29 @@ class PushTEpisodeDataset:
         wrapped = torch.min(abs_angle, 2.0 - abs_angle)
         angle_dist_sq = wrapped ** 2
         return torch.sqrt(pos_dist_sq + angle_dist_sq)
-
+    
+    def distance_object(self, ob_states: torch.Tensor, query: torch.Tensor) -> torch.Tensor:
+        """Compute PushT-specific distance between normalised states, ignoring agent position."""
+        print("!!!!pusht::datasets::distance_object called")
+        pos_diff = ob_states[:, :2] - query[:, :2]
+        pos_dist_sq = torch.sum(pos_diff ** 2, dim=1)
+        angle_diff = ob_states[:, 2] - query[:, 2]
+        abs_angle = torch.abs(angle_diff)
+        wrapped = torch.min(abs_angle, 2.0 - abs_angle)
+        angle_dist_sq = wrapped ** 2
+        return torch.sqrt(pos_dist_sq + angle_dist_sq)
 
 def load_episode_dataset(
     dataset_path: str,
     use_relative_action: bool = False,
     use_object_centric_frame: bool = False,
-    calculate_contact: bool = False,
+    detect_contact: bool = False,
 ) -> PushTEpisodeDataset:
     return PushTEpisodeDataset(
         dataset_path,
         use_relative_action=use_relative_action,
         use_object_centric_frame=use_object_centric_frame,
-        calculate_contact=calculate_contact,
+        detect_contact=detect_contact,
     )
 
 
@@ -523,5 +537,5 @@ if __name__ == "__main__":
     dataset_path = "models/pusht_cchi_v7_replay.zarr.zip"
     use_relative_action = False
     use_object_centric_frame = False
-    dataset = PushTEpisodeDataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame, calculate_contact=True)
+    dataset = PushTEpisodeDataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame, detect_contact=True)
     

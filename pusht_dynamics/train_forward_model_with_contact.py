@@ -21,14 +21,14 @@ use_relative_action = False
 use_object_centric_frame = False
 use_relative_action = True
 use_object_centric_frame = True
-calculate_contact = True
+detect_contact = True
 epochs = 500
 batch_size = 512
 lr = 1e-3
 val_ratio = 0.2
 
 relative = "re" if use_relative_action else "abs"
-run_name = f"forward_{relative}_contact_{calculate_contact}_bs{batch_size}_lr{lr}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+run_name = f"forward_{relative}_contact_{detect_contact}_bs{batch_size}_lr{lr}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
 # ---- device + AMP for RTX 2080 Ti (FP16) ----
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -39,7 +39,7 @@ scaler = torch.amp.GradScaler(enabled=(device == "cuda"))
 torch.backends.cudnn.benchmark = False
 
 # --- data ---
-base = load_episode_dataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame, calculate_contact=calculate_contact)
+base = load_episode_dataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame, detect_contact=detect_contact)
 base_train, base_val = split_episodes(base, val_ratio=val_ratio, seed=42)
 train_ds = ForwardDynamicsContactDataset(base_train)
 val_ds   = ForwardDynamicsContactDataset(base_val)

@@ -129,7 +129,7 @@ def main():
     dataset_path = "models/pusht_cchi_v7_replay.zarr.zip"
     use_relative_action = False
     use_object_centric_frame = False
-    calculate_contact = True
+    detect_contact = True
     # Point to your run directory created by the training script:
     run_dir = "runs/forward_abs_contact_True_bs512_lr0.001_20260120_003613"   # <-- set this
     ckpt_dir = os.path.join(run_dir, "checkpoints")
@@ -137,7 +137,7 @@ def main():
     print(f"Using checkpoint: {ckpt_path}")
 
     # ---- load a base episode dataset (normalized already) ----
-    base_ds = load_episode_dataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame, calculate_contact=calculate_contact)
+    base_ds = load_episode_dataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame, detect_contact=detect_contact)
 
     # Pick one episode index to evaluate:
     epi_idx = 0  # change as needed

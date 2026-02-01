@@ -68,10 +68,14 @@ class StateGPIPolicyPlus(GPIPolicyBase):
         
         if config.use_relative_action:
             print("Using relative action inverse model.")
+            raise ValueError("not implemented.")
             inverse_model = "/home/ynyg/yuxuan/GPI/GPI/runs/inverse_re_bs512_20251215_225843"
         elif not config.use_relative_action:
             print("Using absolute action inverse model.")
             inverse_model = "/home/ynyg/yuxuan/GPI/GPI/runs/inverse_abs_contact_True_bs512_lr0.001_20260120_002813"
+
+            # only use current obs and next obs, without taking the predicted agent state in the nextobs
+            inverse_model = "/home/ynyg/yuxuan/GPI/GPI/runs/inverse_abs_contact_True_bs512_lr0.001_20260126_093934" 
         else:
             raise ValueError("config.use_relative_action must be bool")
         forward_ckpt_dir = os.path.join(forward_model, "checkpoints")
@@ -86,6 +90,7 @@ class StateGPIPolicyPlus(GPIPolicyBase):
         self.planned_traj = None
         self.temporal_plan = deque()
         self.temporal_plan_next = deque()
+        self.curr_key = None
         self.curr_key_adjusted = None
         self.prev_key = None
         self.curr_key_original = None
@@ -93,13 +98,11 @@ class StateGPIPolicyPlus(GPIPolicyBase):
         self.magic_step = None
 
         
+        
         super().__init__(config)
 
 
         self.detect_contact = config.detect_contact
-        if self.detect_contact:
-            print("Contact detection is enabled in StateGPIPolicyPlus.")
-            self.object_pcd = create_pusht_pts(1024 * 5, self.random_seed)
 
     def _post_reset(self) -> None:
         self.recent_keys.clear()
@@ -154,6 +157,20 @@ class StateGPIPolicyPlus(GPIPolicyBase):
             print("[get_action]: Dataset use_object_centric_frame is True, converting current_obs to object centric frame.")
             current_obs[:2] = self.dataset.global_state_to_relative(torch.from_numpy(current_obs.astype(np.float32)[None,:]))[0].numpy()            
 
+        is_c = None
+        if self.detect_contact:
+            ax, ay, ox, oy, oa = current_obs
+            is_c, _ = detect_contact_pusht(
+                finger_pos=np.array([ax, ay], dtype=np.float64),
+                obj_pos_world=np.array([ox, oy], dtype=np.float64),
+                obj_rad=float(oa),
+                fin_rad=float(15),
+                margin=float(3),
+                pts_num=int(1024 * 5),
+                use_object_centric_frame=self.dataset.use_object_centric_frame,
+                seed=int(self.random_seed),
+                object_pcd=self.dataset.object_pcd,
+            )
 
         normalized_obs = self._normalize_obs(current_obs)
 
@@ -161,7 +178,8 @@ class StateGPIPolicyPlus(GPIPolicyBase):
         noisy_obs = self.add_observation_noise(normalized_obs)
 
         # Step 2-11: geometry-aware policy synthesis in normalised space.
-        plan, pred_traj = self._compute_plan_from_normalized(noisy_obs)
+        # print(f"[get_action] is_contact: {is_c}")
+        plan, pred_traj = self._compute_plan_from_normalized(noisy_obs, is_contact=is_c)
         if plan is None:
             return None # np.zeros(2, dtype=np.float32)
         
@@ -169,20 +187,24 @@ class StateGPIPolicyPlus(GPIPolicyBase):
         if self.prev_obs is None:
             self.prev_obs = noisy_obs
         
-        prev_obs_ts = torch.as_tensor(self.prev_obs, dtype=torch.float32, device=DEVICE).unsqueeze(0)
-        noisy_obs_ts = torch.as_tensor(noisy_obs, dtype=torch.float32, device=DEVICE).unsqueeze(0)
+        
         # print("prev_obs_ts", self._unnormalize_obs(prev_obs_ts.detach().cpu().numpy()))
         # print("noisy_obs_ts", self._unnormalize_obs(noisy_obs_ts.detach().cpu().numpy()))
         # print("plan", self._unnormalize_obs(plan.detach().cpu().numpy()))
 
+        if self.detect_contact and is_c:
         # ynyg test: use inverse model to get actio
-        # plan_ts = torch.as_tensor(plan, dtype=torch.float32, device=DEVICE).unsqueeze(0)        
-        # action_norm = self.inverse_dynamics_model(prev_obs_ts, noisy_obs_ts, plan_ts)
-        # action_norm = action_norm.detach().cpu().numpy().squeeze(0)
-        # action_raw = self._unnormalize_action(action_norm)
-
-        # ynyg test: use gpi to get action
-        action_raw = self._unnormalize_obs(plan[None,:])[0,:2]
+            if self.debug:
+                print(f"[get_action] contact: {is_c}; use inverse model to get action")
+            prev_obs_ts = torch.as_tensor(self.prev_obs, dtype=torch.float32, device=DEVICE).unsqueeze(0)
+            noisy_obs_ts = torch.as_tensor(noisy_obs, dtype=torch.float32, device=DEVICE).unsqueeze(0)
+            plan_ts = torch.as_tensor(plan, dtype=torch.float32, device=DEVICE).unsqueeze(0)        
+            action_norm = self.inverse_dynamics_model(prev_obs_ts, noisy_obs_ts, plan_ts)
+            action_norm = action_norm.detach().cpu().numpy().squeeze(0)
+            action_raw = self._unnormalize_action(action_norm)
+        else:
+            # ynyg test: use gpi to get action
+            action_raw = self._unnormalize_action(plan[None,:2])[0]
         self.prev_obs = noisy_obs
 
 
@@ -200,19 +222,7 @@ class StateGPIPolicyPlus(GPIPolicyBase):
         self.previous_action = final_action
         self.step_count += 1
 
-        if self.detect_contact:
-            ax, ay, ox, oy, oa = current_obs
-            is_c, _ = detect_contact_pusht(
-                finger_pos=np.array([ax, ay], dtype=np.float64),
-                obj_pos_world=np.array([ox, oy], dtype=np.float64),
-                obj_rad=float(oa),
-                fin_rad=float(15),
-                margin=float(3),
-                pts_num=int(1024 * 5),
-                use_object_centric_frame=self.dataset.use_object_centric_frame,
-                seed=int(self.random_seed),
-                object_pcd=self.object_pcd,
-            )
+        
         # show plan and final action in plot
         if self.debug:
             print(f"is contact: {is_c}")
@@ -223,15 +233,28 @@ class StateGPIPolicyPlus(GPIPolicyBase):
             agent_pos = current_obs[:2]
             object_pos = current_obs[2:4]
             object_ori = current_obs[4]
-            object_pos_in_demo = plan_np[2:4]
-            object_ori_in_demo = plan_np[4]
+            agent_pos_in_demo = pred_traj[0,0:2]
+            object_pos_in_demo = pred_traj[0,2:4]
+            object_ori_in_demo = pred_traj[0,4]
+            is_contact_in_pred_traj = pred_traj[:, 5]
+            print(f"is_contact_in_pred_traj: {is_contact_in_pred_traj}  ")
+            print(f"is_contact_in_pred_traj: {is_contact_in_pred_traj[0]}")
+            if is_contact_in_pred_traj[0] > 0.5: # 0,1
+                agent_in_demo_color = "purple"
+            else:
+                agent_in_demo_color = "orange"
+            
+            ax.scatter(agent_pos_in_demo[0], agent_pos_in_demo[1], c=agent_in_demo_color, marker='*', s=120, label='Agent in Demo', zorder=5)
+
             ax.plot(pred_traj[:, 0], pred_traj[:, 1], color = 'orange', label='agent traj')
             ax.plot(pred_traj[:, 2], pred_traj[:, 3], color = 'green', label='object traj')
             ax.scatter(action_raw[0], action_raw[1], c='r', marker='x', s=100, label='Final Action')
             if is_c:
-                ax.scatter(agent_pos[0], agent_pos[1], c='r', marker='o', s=100, label='Agent')
+                agent_color = "r"                
             else:
-                ax.scatter(agent_pos[0], agent_pos[1], c='orange', marker='o', s=100, label='Agent')
+                agent_color = "orange"
+
+            ax.scatter(agent_pos[0], agent_pos[1], c=agent_color, marker='o', s=100, label='Agent', zorder=5)
             ax.scatter(object_pos[0], object_pos[1], c='g', marker='o', s=100, label='Object')
             ax.scatter(plan_np[0], plan_np[1], c='orange', marker='x', s=100, label='Plan agent')
             ax.scatter(plan_np[2], plan_np[3], c='blue', marker='o', s=100, label='Plan object')
@@ -280,8 +303,8 @@ class StateGPIPolicyPlus(GPIPolicyBase):
             plt.show()
 
         return final_action
-
-    def _compute_plan_from_normalized(
+    
+    def _compute_plan_from_normalized_inverse_dynamics_feedback(
         self, normalized_obs: np.ndarray
     ) -> Optional[np.ndarray]:
         if len(self.database) == 0:
@@ -290,9 +313,15 @@ class StateGPIPolicyPlus(GPIPolicyBase):
 
         
         if self.action_horizon == 1:
+            # calculate the distance of full observations
+            # distances, keys = self.database.nearest(
+            #     normalized_obs, k=self.k_neighbors, exclude=self.recent_set
+            # )
+
             distances, keys = self.database.nearest(
                 normalized_obs, k=self.k_neighbors, exclude=self.recent_set
             )
+
             if not keys:
                 return None
             # fix me: try one trajectory to the end
@@ -328,6 +357,166 @@ class StateGPIPolicyPlus(GPIPolicyBase):
             #     print("Pred traj length <=1, not consuming key.")
             self.prev_key = self.curr_key_adjusted
             self.curr_key_adjusted = keys[0]
+            
+            return plan_norm, pred_traj
+        
+        else:
+            raise NotImplementedError("Multi-step action horizon not implemented for inverse dynamics feedback")
+        
+        # if self.plan.empty():
+        # if len(self.temporal_plan) <= 1:  # fix me: at the begining, it is empty, afterwards, it always has one key left after action horizion
+        #     # Step 5-6: pick the demonstration/time with minimal combined distance.
+        #     _, keys = self.database.nearest(
+        #         normalized_obs, k=1, exclude=self.recent_set
+        #     )
+        #     if not keys:
+        #         return None
+        #     start_key = keys[0]  # κ(x₀) = argmin d_t^{(i)}
+        #     # self.plan.load(start_key[0], start_key[1])
+        #     self.temporal_plan.clear()
+        #     self.temporal_plan_next.clear()
+        #     self.temporal_plan.append(start_key)
+        #     next_key = start_key
+
+        #     # get trajectory for debug and visualization
+        #     epi, start_t = start_key
+        #     self.prev_key = self.curr_key_adjusted
+        #     self.curr_key_adjusted = start_key
+        #     sample = self.dataset[epi]  # {'obs': normalized_obs, 'action': normalized_action}
+        #     Xn = np.asarray(sample["obs"], dtype=np.float32)
+        #     t0 = int(np.clip(start_t, 0, len(Xn) - 1))
+        #     Xsel_n = Xn[t0:]
+        #     Xsel_n = self.dataset.unnormalize_obs(Xsel_n)
+        #     self.planned_traj = Xsel_n
+        #     for i in range(self.action_horizon):
+        #         prev_key = next_key
+        #         next_key = (prev_key[0], prev_key[1] + 1)  # only use the nearest neighbor for future state
+        #         if next_key not in self.database._key_to_active_idx:
+        #             next_key = prev_key
+        #             # fix me: todo, handle multiples keys
+        #         self.temporal_plan_next.append(next_key)
+        #         self.temporal_plan.append(next_key)
+                
+            
+        # total_steps = len(self.plan.actions)
+        # total_steps = self.action_horizon
+        # # action_norm, state_norm, timestep = self.plan.pop()
+        # # step_in_plan = self.plan.pointer - 1
+        # neighbor_key = self.temporal_plan.popleft()
+        # neighbor_next_key = self.temporal_plan_next.popleft()
+        # # if self.debug:
+        # #     print("popped neighbor key:", neighbor_key)
+        # #     print("popped neighbor next key:", neighbor_next_key)
+        # #     print("remaining temporal plan keys length:", len(self.temporal_plan))
+        # #     print("remaining temporal plan next keys length:", len(self.temporal_plan_next))
+        # neighbor_idx = torch.tensor([self.database._key_to_active_idx[neighbor_key]], dtype=torch.long, device=self.database.device)
+        # neighbor_next_idx = torch.tensor([self.database._key_to_active_idx[neighbor_next_key]], dtype=torch.long, device=self.database.device)
+        # neighbor_states = self.database._states.index_select(0, neighbor_idx)
+        # neighbor_states_future = self.database._states.index_select(0, neighbor_next_idx)
+
+
+        # step_in_plan = self.action_horizon - (len(self.temporal_plan))
+        # if total_steps == 0:
+        #     return None
+        # if self.fixed_lambda2 is not None:
+        #     lambda2 = float(self.fixed_lambda2)
+        # else:
+        #     lambda2 = self.calculate_dynamic_lambda2(step_in_plan, total_steps)
+        # # query_agent = normalized_obs[:2]
+        # query_obs = torch.tensor(normalized_obs, dtype=torch.float32, device=self.database.device)
+
+        # # neighbor_agent = state_norm[:2]
+        # neighbor_obs = neighbor_states
+
+        # # Step 6: progression flow u_prog = ẋ κ (x₀) following the local tangent.
+        # # u_prog = action_norm[:2] - neighbor_agent
+        # progression = neighbor_states_future - neighbor_obs
+        # # Step 7: attraction flow u_att = -∇ d_rob that steers toward the demo point.
+        # # u_att = neighbor_agent - query_agent
+        # attraction = neighbor_obs - query_obs
+
+        # # Step 8-11: local policy π_i(x₀) = λ₁ u_prog + λ₂ u_att.
+        # # agent_flow = query_agent + lambda1 * u_prog + lambda2 * u_att
+        # displacement = lambda1 * progression + lambda2 * attraction
+        # local_policy = query_obs + displacement[0]
+
+        # # local_policy = action_norm.copy()
+        # # local_policy[:2] = agent_flow
+        # executed_key = (neighbor_key[0], neighbor_key[1])
+        # if executed_key is not None:
+        #     self._consume_key(executed_key)
+
+        # return local_policy, self.planned_traj # fix me: not very good to return self.planned_traj   
+
+    def _compute_plan_from_normalized(
+        self, normalized_obs: np.ndarray,
+        is_contact: Optional[bool] = None
+    ) -> Optional[np.ndarray]:
+        if len(self.database) == 0:
+            return None
+        lambda1 = float(self.fixed_lambda1) if self.fixed_lambda1 is not None else 1.0
+
+        
+        if self.action_horizon == 1:
+            # calculate the distance of full observations
+            # distances, keys = self.database.nearest(
+            #     normalized_obs, k=self.k_neighbors, exclude=self.recent_set
+            # )
+
+            distances, keys = self.database.nearest(
+                normalized_obs, k=self.k_neighbors, exclude=self.recent_set
+            )
+
+            if not keys:
+                return None
+            
+
+            # force to find next step in a same episode
+            if self.prev_key is not None:
+                if keys[0][0] == self.prev_key[0]:
+                    # find next step in the same episode as prev_key
+                    next_key = (self.prev_key[0], self.prev_key[1] + 1)
+                    if next_key in self.database._key_to_active_idx:
+                        keys[0] = next_key          
+                    else:
+                        print("Cannot find next step in the same episode, using nearest key.")
+
+            self.prev_key = keys[0]
+
+            # fix me: try one trajectory to the end
+            if self.magic_episode is None:
+                print("triggering magic episode and step")
+                self.magic_episode = keys[0][0]
+                self.magic_step = keys[0][1]
+            else:
+                self.magic_step += 1
+                if (self.magic_episode, self.magic_step) not in self.database._key_to_active_idx:
+                    self.magic_step -= 1  # stay at the end
+            # keys = [(self.magic_episode, self.magic_step)]
+
+            # for dist, key in zip(distances, keys):
+            #     print(f"Distance: {dist:.5f}, Key: {key}")
+            # print("self.recent_keys:", self.recent_keys)
+            # Local GPI policy: blend progression/attraction flows of the nearest demo.
+            plan_norm, pred_traj = self.database.knn_object(
+                normalized_obs,
+                k=self.k_neighbors,
+                lambda1=lambda1,
+                lambda2=(
+                    float(self.fixed_lambda2) if self.fixed_lambda2 is not None else 1.0
+                ),
+                exclude=self.recent_set,
+                prefetched=(distances, keys),
+                is_contact=is_contact,
+            )
+
+            # fix me: need better hanlding of skip recent set
+            # if pred_traj.shape[0] > 4:
+            # self._consume_key(keys[0])
+            # else:
+            #     print("Pred traj length <=1, not consuming key.")
+            # self.prev_key = self.curr_key_adjusted
+            # self.curr_key_adjusted = keys[0]
             
             return plan_norm, pred_traj
         # if self.plan.empty():
@@ -422,9 +611,14 @@ class StateGPIPolicyPlus(GPIPolicyBase):
             return None
         lambda1 = float(self.fixed_lambda1) if self.fixed_lambda1 is not None else 1.0
         if self.action_horizon == 1:
-            distances, keys = self.database.nearest(
+            # ynyg test: only calculate closest object from demo
+            # distances, keys = self.database.nearest(
+            #     normalized_obs, k=self.k_neighbors, exclude=self.recent_set
+            # )
+            distances, keys = self.database.nearest_object(
                 normalized_obs, k=self.k_neighbors, exclude=self.recent_set
             )
+            print("test test test")
             if not keys:
                 return None
             # Local GPI policy: blend progression/attraction flows of the nearest demo.
@@ -442,7 +636,11 @@ class StateGPIPolicyPlus(GPIPolicyBase):
             return action_norm
         if self.plan.empty():
             # Step 5-6: pick the demonstration/time with minimal combined distance.
-            _, keys = self.database.nearest(
+            # ynyg test: only calculate closest object from demo
+            # _, keys = self.database.nearest(
+            #     normalized_obs, k=1, exclude=self.recent_set
+            # )
+            _, keys = self.database.nearest_object(
                 normalized_obs, k=1, exclude=self.recent_set
             )
             if not keys:

@@ -22,7 +22,7 @@ dataset_path = "models/pusht_cchi_v7_replay.zarr.zip"
 use_relative_action = False
 use_object_centric_frame = False
 
-epochs = 500
+epochs = 1000
 batch_size = 512
 lr = 1e-3
 val_ratio = 0.2

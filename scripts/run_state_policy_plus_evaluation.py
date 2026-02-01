@@ -37,6 +37,8 @@ class EvaluationConfig:
     random_seed: int
     action_smoothing: float
     use_relative_action: bool
+    use_object_centric_frame: bool
+    detect_contact: bool
 
 
 @dataclass
@@ -74,9 +76,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--video-path", type=str, default=None, help="Optional output path for rendered video")
     parser.add_argument("--no-live-render", dest="live_render", action="store_false", help="Disable live window display during rollout")
     parser.add_argument("--quiet", action="store_true", help="Disable progress bar")
-    parser.add_argument("--no-relative-action", dest="use_relative_action", action="store_false", default=True)
+    parser.add_argument("--no-relative-action", dest="use_relative_action", action="store_false", default=True)    
+    parser.add_argument("--use-object-centric-frame", dest="use_object_centric_frame", action="store_true", default=False)
     parser.add_argument("--disable-noise", dest="enable_obs_noise", action="store_false", default=True)
-    parser.add_argument("--debug", action="store_true", help="Enable debug mode with verbose output", default=False)
+    parser.add_argument("--detect-contact", dest="detect_contact", action="store_true", default=False, help="Enable contact detection")
     return parser.parse_args()
 
 
@@ -98,7 +101,7 @@ def set_global_seed(seed: Optional[int]) -> None:
     torch.use_deterministic_algorithms(True, warn_only=True)
 
 
-def generate_configs(count: int, seed: Optional[int]) -> list[EvaluationConfig]:
+def generate_configs(count: int, seed: int=None, use_relative_action: bool=False, use_object_centric_frame: bool=False, detect_contact: bool=False) -> list[EvaluationConfig]:
     rng_seed = seed if seed is not None else random.randrange(1 << 30)
     rng = random.Random(rng_seed)
     configs: list[EvaluationConfig] = []
@@ -130,7 +133,9 @@ def generate_configs(count: int, seed: Optional[int]) -> list[EvaluationConfig]:
                 obs_noise_std=round(rng.uniform(0.0, 0.02), 4),
                 random_seed=rng.randint(0, 1000),
                 action_smoothing=round(rng.uniform(0.0, 0.4), 3),
-                use_relative_action=False
+                use_relative_action=use_relative_action,
+                use_object_centric_frame=use_object_centric_frame,
+                detect_contact=detect_contact,
             )
         )
     return configs
@@ -175,6 +180,8 @@ def run_evaluation_run(
         action_horizon=config.action_horizon,
         action_smoothing=config.action_smoothing,
         device="cuda" if torch is not None and torch.cuda.is_available() else None,
+        detect_contact=config.detect_contact,
+        use_object_centric_frame=config.use_object_centric_frame,
     )
     policy = StateGPIPolicyPlus(gpi_config)
     evaluator = StateEvaluator(env_seed=config.seed, max_steps=max_steps)
@@ -245,7 +252,7 @@ def main() -> None:
     seed = args.random_seed
     set_global_seed(seed)
 
-    configs = generate_configs(args.count, seed)
+    configs = generate_configs(args.count, seed, use_relative_action=args.use_relative_action, use_object_centric_frame=args.use_object_centric_frame, detect_contact=args.detect_contact)
     summaries: list[tuple[EvaluationConfig, EvaluationResult]] = []
 
     steps_list = []

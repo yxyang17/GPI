@@ -1,4 +1,13 @@
 # GPI + feedback
+# todo:
+### find the closet object state in the demo, linear interpolate the trajectory from observatoin to that,
+  - the problem is that need to move agent to the contact position first. This introduce a seperate module, can be investigated later
+### just follow GPI, the only thing introduced is once it contact, then adding feedback, use inverse dynamics, finding the reference only by object state,,,
+  - 
+
+move agent to the contact point somehow
+usnig inverse dynamics 
+somehow introduce feedback
 
 # create virtual environment
 sudo apt install python3.10-venv

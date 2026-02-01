@@ -40,7 +40,8 @@ def evaluate_episode(
     # ---- NEW: contact settings ----
     AGENT_XY_IDXS=(0, 1),   # indices in obs vector for agent xy in object frame
     CONTACT_TH=0.03,        # contact threshold (tune to your object size / units)
-    PLOT_CONTACT_ERROR=True
+    PLOT_CONTACT_ERROR=True,
+    detect_contact=False    
 ):
     """
     Uses (o_{t-1}, o_t, o_{t+1}) -> a_t over one episode from the dataset.
@@ -49,6 +50,21 @@ def evaluate_episode(
     episode = dataset[epi_idx]  # already normalized by base dataset
     obs_np = episode["obs"]
     act_np = episode["action"]
+    contact_np = episode.get("is_contact", None)
+    if detect_contact and contact_np is None:
+        raise ValueError("is_contact data is required for contact evaluation.")
+    
+    if detect_contact:
+        # ynyg fix me: not a good way, because contact_np has multiple segments, 
+        # cannot use the state at the end of one segments and the first of the next segments to calculate action
+        print("Using provided is_contact data for evaluation.")
+        print(f"Original episode length: {len(obs_np)}")
+        print(f"obs_np.shape, act_np.shape, contact_np.shape: {obs_np.shape}, {act_np.shape}, {contact_np.shape}")
+        obs_np = obs_np[contact_np[:, 0]]  # only keep contact frames
+        act_np = act_np[contact_np[:, 0]]
+        print(f"Filtered episode length (contact only): {len(obs_np)}")
+
+
     T, Ta = len(obs_np), len(act_np)
 
     # valid window needs t-1, t, t+1 and a_t
@@ -97,6 +113,7 @@ def evaluate_episode(
         o_curr = o[t  ].unsqueeze(0)
         o_next = o[t+1].unsqueeze(0)
         a_t    = a[t  ].unsqueeze(0)  # [1, act_dim]
+
 
         pred_a = model(o_prev, o_curr, o_next)  # [1, act_dim]
         pred_act_list.append(pred_a.detach().cpu().numpy())
@@ -229,11 +246,11 @@ def main():
     dataset_path = "models/pusht_cchi_v7_replay.zarr.zip"
     use_relative_action = True
     use_object_centric_frame = True
+    detect_contact = True
+    
 
-    run_dir = "runs/inverse_fp16_bs256_20251113_005904"
-    run_dir = "runs/inverse_fp16_bs256_20251113_183159"
-    run_dir = "runs/inverse_re_bs512_20251210_235709"
-    run_dir = "runs/inverse_re_bs512_20251215_225843"
+    run_dir = "runs/inverse_abs_contact_True_bs512_lr0.001_20260120_002813"
+    run_dir = "runs/inverse_abs_contact_True_bs512_lr0.001_20260126_093934"
     ckpt_dir = os.path.join(run_dir, "checkpoints")
     ckpt_path = pick_checkpoint(ckpt_dir)
     print(f"Using checkpoint: {ckpt_path}")
@@ -242,7 +259,8 @@ def main():
     base_ds = load_episode_dataset(
         dataset_path,
         use_relative_action=use_relative_action,
-        use_object_centric_frame=use_object_centric_frame
+        use_object_centric_frame=use_object_centric_frame,
+        detect_contact=detect_contact
     )
 
     # which episode
@@ -268,7 +286,8 @@ def main():
         print_every=50,
         AGENT_XY_IDXS=AGENT_XY_IDXS,
         CONTACT_TH=CONTACT_TH,
-        PLOT_CONTACT_ERROR=True
+        PLOT_CONTACT_ERROR=True,
+        detect_contact=detect_contact
     )
 
     # Optional: save metrics

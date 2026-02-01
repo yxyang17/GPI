@@ -52,7 +52,8 @@ class GPIPolicyBase:
         self.dataset = config.dataset_loader(
             config.dataset_path,
             use_relative_action=config.use_relative_action,
-            use_object_centric_frame=config.use_object_centric_frame
+            use_object_centric_frame=config.use_object_centric_frame,
+            detect_contact=config.detect_contact
         )
         self.to_global_action = config.to_global_action
         self.database = StateDatabase(

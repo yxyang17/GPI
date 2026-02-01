@@ -42,7 +42,7 @@ def vis_data(dataset, episode_indices: list=[], use_object_centric_frame: bool =
             obs_t = torch.from_numpy(obs.astype(np.float32))
             action_t = torch.from_numpy(action.astype(np.float32))
             obs_global = obs.copy()
-            obs_global[:,:2] = dataset.relative_state_to_global(obs_t).numpy()
+            obs_global[:,:2] = dataset.relative_state_to_global(obs_t, obs_t[:,:2]).numpy()
             action_global = dataset.relative_action_to_global(obs_t, action_t).numpy()
             pusher_pos_global = dataset.relative_action_to_global(obs_t, obs_t[:,:2]).numpy()
         else:
@@ -292,12 +292,11 @@ if __name__ == "__main__":
     dataset_path = "models/pusht_cchi_v7_replay.zarr.zip"
     use_relative_action = True
     use_object_centric_frame = True
-    calculate_contact = True
+    detect_contact = True
     # use_relative_action = False
     # use_object_centric_frame = False
-    # calculate_contact = False
-    dataset = load_episode_dataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame, calculate_contact=calculate_contact)
-
+    # detect_contact = False
+    dataset = load_episode_dataset(dataset_path, use_relative_action=use_relative_action, use_object_centric_frame=use_object_centric_frame, detect_contact=detect_contact)
     # database = StateDatabase(
             #     dataset,
             #     device=None,
@@ -317,8 +316,8 @@ if __name__ == "__main__":
     #  combine and plot multiple episodes
     ########################################
     # episode_indices = [11, 12]  # change to the episodes you want to show
-    # episode_indices = [i for i in range(len(dataset.episodes))]  # all episodes
-    episode_indices = [i for i in range(10)]  # all episodes
+    episode_indices = [i for i in range(len(dataset.episodes))]  # all episodes
+    # episode_indices = [i for i in range(10)]  # all episodes
 
     # print("dataset obs shape", dataset[0]['obs'].shape)
     print("is contact calculated:", dataset[0]['obs'][:,-1])
